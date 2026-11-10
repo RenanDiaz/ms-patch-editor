@@ -32,3 +32,9 @@
 .s1 td:last-child { text-align: right; font-family: var(--mono); }
 .s1 pre { white-space: pre-wrap; word-break: break-all; font-family: var(--mono); font-size: 12px; }
 .s1 .diffs { border: 1px solid var(--bad); border-radius: 8px; padding: 10px; }
+.s1 .s3-step { border: 1px solid var(--border); border-radius: 8px; padding: 12px; background: var(--panel); }
+.s1 .s3-results li { margin: 4px 0; }
+.s3-confirm { max-width: min(720px, calc(100vw - 32px)); background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 8px; }
+.s3-confirm pre { white-space: pre-wrap; word-break: break-all; font-family: var(--mono); font-size: 12px; max-height: 40vh; overflow: auto; }
+.s3-confirm .bar { display: flex; gap: 8px; }
+.s3-confirm button { font: inherit; padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); cursor: pointer; }

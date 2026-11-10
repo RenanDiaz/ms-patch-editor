@@ -33,7 +33,7 @@ Agreed with the user. See `docs/protocol.md` for bytes and sources.
 | Write (persisted) | Store Patch `0x32` | Needs explicit approval |
 | Forbidden | Unknown `0x60`, anything firmware/update related | Never send |
 
-Enforced in code by `src/transport/readOnlyGuard.ts` (`readOnly()`): every scan goes through it. A write path must never bypass it without the user's approval for that operation.
+Enforced in code by `src/transport/readOnlyGuard.ts` (`readOnly()`): every scan goes through it. The only write path is `src/transport/approvedWrites.ts` (`withApprovedWrites()`): it lets through exactly the approved 0x28/0x32 bytes, in order, once each. Never call it without the user's approval for that operation.
 
 Not ported from g200kg: the autosave timer and `InstallChecker` (it writes test effects into patch 49).
 
@@ -44,4 +44,4 @@ Not ported from g200kg: the autosave timer and `InstallChecker` (it writes test 
 - `src/model` — patch/block/parameter model, working vs. device copy
 - `src/ui` — React components
 - `src/fixtures` — FAKE data for the UI prototype; never sent to the pedal
-- `scripts/` — generators: `gen-effects-60b.mjs` (effect table) and `gen-golden-readbin.mjs` (differential oracle); both take the path to a g200kg clone outside the repo
+- `scripts/` — generators: `gen-effects-60b.mjs` (effect table), `gen-golden-readbin.mjs` and `gen-golden-makebin.mjs` (differential oracles); all take the path to a g200kg clone outside the repo
