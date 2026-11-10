@@ -163,6 +163,7 @@ export function usePedalSync(pedal: PedalSession | undefined, state: BankState, 
         await pedal.select(next)
       }
       bufferRef.current = { slot: next, patch: stateRef.current.slots[next].device }
+      setPedalProgram(pedal.activeProgram)
       await pushWorking(pedal, next)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -180,6 +181,7 @@ export function usePedalSync(pedal: PedalSession | undefined, state: BankState, 
     void enqueue(live ? 'Activando escucha en vivo…' : 'Restaurando el patch en el pedal…', async () => {
       if (live) {
         await pedal.select(slot)
+        setPedalProgram(pedal.activeProgram)
         bufferRef.current = { slot, patch: stateRef.current.slots[slot].device }
         await pushWorking(pedal, slot)
       } else if (pedal.activeProgram === slot) {
@@ -283,6 +285,7 @@ export function usePedalSync(pedal: PedalSession | undefined, state: BankState, 
       ok = true
       // Live off: the app does not move the pedal, so go back to where it was.
       if (!liveRef.current && back !== null && back !== index) await pedal.select(back)
+      setPedalProgram(pedal.activeProgram)
     })
     return ok
   }

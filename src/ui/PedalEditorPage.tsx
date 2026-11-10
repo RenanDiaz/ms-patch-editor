@@ -41,6 +41,7 @@ export function PedalEditorPage({ connect = connectWebMidi, sessionOptions, live
       const c = await connect()
       const session = new PedalSession(c.transport, sessionOptions)
       const cap = await session.scan((slot) => setPhase({ kind: 'busy', text: `Leyendo ${Math.min(slot + 1, 50)}/50…` }))
+      session.startPolling(sessionOptions?.gapMs === 0 ? 20 : 250)
       const patches = cap.patches.map(patchFromDevice)
       const initial = { ...initBank(cap.identity.firmware, patches, cap.patches), current: cap.originalProgram }
       setPhase({ kind: 'ready', session, initial, ports: `${c.inputName}` })

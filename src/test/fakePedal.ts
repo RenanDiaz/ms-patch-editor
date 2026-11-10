@@ -66,12 +66,12 @@ export function fakePedal(opts: { current?: number } = {}) {
     get buffer() {
       return buffer
     },
-    /** The user changes patch on the pedal (the edited buffer is kept, as on the real pedal). */
+    /**
+     * The user changes patch on the pedal (the edited buffer is kept, as on the
+     * real pedal). The pedal does not announce it: the app sees it by polling 0x33.
+     */
     selectOnPedal(slot: number) {
       leaveTo(slot)
-      deliver([0xb0, 0, 0])
-      deliver([0xb0, 0x20, 0])
-      deliver([0xc0, slot])
     },
     /** The user turns a knob on the pedal: the buffer changes and the pedal emits 0x31. */
     turnKnob(effect: number, param: number, value: number, newBytes?: number[]) {

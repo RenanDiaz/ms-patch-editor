@@ -36,20 +36,24 @@ describe('PedalSession (simulated pedal)', () => {
     expect(pedal.sent).toEqual([[0xf0, 0x52, 0x00, 0x5f, 0x29, 0xf7]])
   })
 
-  it('reports patch changes and knob turns made on the pedal, but not its replies during an operation', async () => {
+  it('sees patch changes made on the pedal by polling 0x33, and knob turns by their 0x31', async () => {
     const pedal = fakePedal()
     const s = new PedalSession(pedal.transport, fast)
     const events: PedalEvent[] = []
     s.onEvent((e) => events.push(e))
     await s.scan()
     expect(events).toEqual([]) // C0 replies during the scan are not events
+    s.startPolling(10)
     pedal.selectOnPedal(7)
+    await new Promise((r) => setTimeout(r, 450))
     pedal.turnKnob(0, 2, 50)
+    s.close()
     expect(events).toEqual([
       { type: 'program', slot: 7 },
       { type: 'param', effect: 0, param: 2, value: 50 },
     ])
     expect(s.activeProgram).toBe(7)
+    expect(pedal.sent.filter((m) => !isAllowedReadMessage(m))).toEqual([])
   })
 
   it('runs operations one at a time', async () => {

@@ -9,7 +9,7 @@
 import type { MidiMessage, MidiTransport } from '../transport/MidiTransport'
 import { withApprovedWrites } from '../transport/approvedWrites'
 import { readOnly } from '../transport/readOnlyGuard'
-import { parseParamEdit, parseProgramChange, programChange, requestPatch, type ParamEditEvent } from './messages'
+import { parseParamEdit, parseProgramChange, programChange, requestCurrentProgram, requestPatch, type ParamEditEvent } from './messages'
 import { isPatchData60B } from './patch60b'
 import { MidiSession, writeApproval, writeSlot, type SessionOptions, type WriteResult } from './s3'
 import { scanBank, type BankCapture, type LogEntry, type ScanOptions } from './scanBank'
@@ -25,6 +25,10 @@ export class PedalSession {
   private readonly unsubscribe: () => void
   private queue: Promise<unknown> = Promise.resolve()
   private busy = 0
+  /** Program Change replies right after an operation may be stale; ignore them until this time. */
+  private quietUntil = 0
+  private pollTimer: ReturnType<typeof setInterval> | undefined
+  private readonly clock: () => number
   private readonly t0: number
   readonly log: LogEntry[] = []
   /** Pedal's active patch as last known (scan start, our own Program Changes, or the pedal's C0). */
@@ -36,15 +40,17 @@ export class PedalSession {
     this.opts = opts
     this.raw = transport
     this.io = readOnly(transport)
-    this.t0 = (opts.now ?? (() => performance.now()))()
+    this.clock = () => performance.now()
+    this.t0 = (opts.now ?? this.clock)()
     this.unsubscribe = this.io.onMessage((m) => this.onIdleMessage(m))
   }
 
-  /** Messages that arrive while no operation runs are the pedal's own events. */
+  /** Messages that arrive while no operation runs are the pedal's own events (or replies to polling). */
   private onIdleMessage(m: MidiMessage) {
     if (this.busy) return
     const slot = parseProgramChange(m)
     if (slot !== null) {
+      if (this.clock() < this.quietUntil || slot === this.activeProgram) return
       this.activeProgram = slot
       this.emit({ type: 'program', slot })
       return
@@ -70,6 +76,7 @@ export class PedalSession {
         return await fn()
       } finally {
         this.busy--
+        this.quietUntil = this.clock() + 300
         if (this.log.length > LOG_LIMIT) this.log.splice(0, this.log.length - LOG_LIMIT)
       }
     }
@@ -152,7 +159,24 @@ export class PedalSession {
     withApprovedWrites(this.raw, { label: 'Restaurar al cerrar', writes: [m] }).send(m)
   }
 
+  /**
+   * The pedal does not announce patch changes made on it (g200kg polls 0x33
+   * every 80 ms, index.html:448). Polls while idle; replies are not logged.
+   */
+  startPolling(intervalMs = 250) {
+    this.stopPolling()
+    this.pollTimer = setInterval(() => {
+      if (!this.busy) this.io.send(requestCurrentProgram())
+    }, intervalMs)
+  }
+
+  stopPolling() {
+    clearInterval(this.pollTimer)
+    this.pollTimer = undefined
+  }
+
   close() {
+    this.stopPolling()
     this.unsubscribe()
     this.listeners.clear()
   }
