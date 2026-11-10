@@ -153,10 +153,19 @@ describe('S3 procedures (simulated pedal)', () => {
     expect(pedal.memory).toEqual(bank)
   })
 
-  it('writeSlot fails without an ack, after sending only the approved writes', async () => {
+  it('records the Store ack when it comes', async () => {
+    const pedal = fakePedal()
+    const t = testPatch()
+    const r = await writeSlot(ctxFor(pedal.transport), SLOT, t, writeApproval(SLOT, t, 'x'))
+    expect(r.ack).toEqual([0xf0, 0x52, 0x00, 0x5f, 0x00, 0x00, 0xf7])
+  })
+
+  it('without an ack (as the real fw 2.10 behaved) the read-back decides', async () => {
     const pedal = fakePedal({ noAck: true })
     const t = testPatch()
-    await expect(writeSlot(ctxFor(pedal.transport), SLOT, t, writeApproval(SLOT, t, 'x'))).rejects.toThrow(/Store/)
+    const r = await writeSlot(ctxFor(pedal.transport), SLOT, t, writeApproval(SLOT, t, 'x'))
+    expect(r.ack).toBeNull()
+    expect(r.diff).toEqual([])
   })
 
   it('writeSlot refuses bytes that are not the approved ones', async () => {

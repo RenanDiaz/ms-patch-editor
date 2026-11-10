@@ -1,8 +1,8 @@
 /*
  * S3 controlled-write procedures. Message order follows g200kg's StoreAll
  * (index.html:1659-1680, commit 5bf930c8e1622b0c70c0c3d761424f84955a227a):
- * Program Change, Send Patch 0x28, Store 0x32, wait for the ack.
- * Differences: every write goes through withApprovedWrites() with the exact
+ * Program Change, Send Patch 0x28, Store 0x32. g200kg waits for an ack; the
+ * MS-60B fw 2.10 sent none, so here the read-back decides. Differences: every write goes through withApprovedWrites() with the exact
  * bytes, the slot is read back from memory after switching away and back,
  * and the original program is restored at the end.
  *
@@ -136,7 +136,8 @@ export const writeApproval = (slot: number, bytes: ArrayLike<number>, label: str
 })
 
 export interface WriteResult {
-  ack: number[]
+  /** Store acknowledgement, if any arrived. The MS-60B fw 2.10 sent none in 5 attempts (docs/protocol.md §9). */
+  ack: number[] | null
   readBack: number[]
   /** Byte offsets where readBack differs from what was written. */
   diff: number[]
@@ -145,13 +146,27 @@ export interface WriteResult {
 export const diffOffsets = (a: ArrayLike<number>, b: ArrayLike<number>) =>
   Array.from({ length: Math.max(a.length, b.length) }, (_, i) => i).filter((i) => a[i] !== b[i])
 
-/** C0 pp → 0x28 → 0x32 (+ack) → read back from memory. Needs the approval built by writeApproval() for these bytes. */
-export function writeSlot(ctx: S3Context, slot: number, bytes: ArrayLike<number>, approval: WriteApproval): Promise<WriteResult> {
+/**
+ * C0 pp → 0x28 → 0x32 → wait → read back from memory. Needs the approval
+ * built by writeApproval() for these bytes. The ack is recorded if it comes
+ * but not required: success is decided by the read-back.
+ */
+export function writeSlot(
+  ctx: S3Context,
+  slot: number,
+  bytes: ArrayLike<number>,
+  approval: WriteApproval,
+  settleMs = 1500,
+): Promise<WriteResult> {
   const io = withApprovedWrites(ctx.transport, approval)
   return withSession(ctx, io, async (s) => {
     await s.send(programChange(slot))
     await s.send(sendPatch(bytes))
-    const ack = Array.from(await s.request(storePatch(slot), isStoreAck, 'confirmación de Store'))
+    const from = s.log.length
+    await s.send(storePatch(slot))
+    await s.sleep(settleMs)
+    const ackEntry = s.log.slice(from).find((l) => l.dir === 'in' && isStoreAck(l.bytes))
+    const ack = ackEntry ? ackEntry.bytes : null
     if (io.pending() !== 0) throw new S3Error('quedaron escrituras aprobadas sin enviar')
     const readBack = await readStored(s, slot)
     return { ack, readBack, diff: diffOffsets(bytes, readBack) }

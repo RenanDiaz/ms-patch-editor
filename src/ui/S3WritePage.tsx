@@ -44,6 +44,8 @@ export function S3WritePage() {
   const [slot, setSlot] = useState(49)
   const [pending, setPending] = useState<Pending | null>(null)
   const [results, setResults] = useState<Result[]>([])
+  /** Optional restore source: a capture/backup file (ms60b-capture/1), e.g. the S1 capture. */
+  const [restoreFrom, setRestoreFrom] = useState<{ label: string; patches: number[][] } | null>(null)
   const transportRef = useRef<MidiTransport | null>(null)
   const logRef = useRef<LogEntry[]>([])
   const t0 = useRef(0)
@@ -52,6 +54,8 @@ export function S3WritePage() {
   const ctx = (): S3Context => ({ transport: transportRef.current!, log: logRef.current, t0: t0.current })
   const original = backup?.originalProgram ?? null
   const base = backup?.patches[slot]
+  const restoreBytes = restoreFrom?.patches[slot] ?? base
+  const changedVsFile = backup && restoreFrom ? backup.patches.map((p, i) => (diffOffsets(p, restoreFrom.patches[i]).length ? i : -1)).filter((i) => i >= 0) : []
 
   const testBytes = useMemo(() => {
     if (!base) return null
@@ -89,7 +93,7 @@ export function S3WritePage() {
       setBackup(cap)
       setDownloaded(false)
       // Prefer the slot named "Empty", else the first THRU-only patch.
-      const named = cap.patches.findIndex((p) => /^empty$/i.test(decodePatch60B(p).name))
+      const named = cap.patches.findIndex((p) => /^(empty|s3 test)$/i.test(decodePatch60B(p).name))
       const empty = named >= 0 ? named : cap.patches.findIndex((p) => decodePatch60B(p).effects[0].id === 0)
       if (empty >= 0) setSlot(empty)
       if (cap.identity.version !== '2.10') setError(`Firmware ${cap.identity.version}: las pruebas se prepararon con 2.10.`)
@@ -104,6 +108,24 @@ export function S3WritePage() {
   }
   const stamp = () => new Date().toISOString().replace(/[:.]/g, '-')
   const logJson = () => logRef.current.map((l) => ({ t: Math.round(l.t), dir: l.dir, hex: toHex(l.bytes) }))
+
+  async function loadRestoreFile(file: File) {
+    try {
+      const j = JSON.parse(await file.text()) as { format?: string; patches?: string[] }
+      if (j.format !== 'ms60b-capture/1' || !Array.isArray(j.patches) || j.patches.length !== 50) throw new Error('no es una captura ms60b-capture/1 de 50 patches')
+      const patches = j.patches.map((h) => h.split(' ').map((x) => parseInt(x, 16)))
+      patches.forEach((p, i) => {
+        try {
+          decodePatch60B(p)
+        } catch {
+          throw new Error(`patch ${i + 1} inválido`)
+        }
+      })
+      setRestoreFrom({ label: file.name, patches })
+    } catch (e) {
+      setError(`Archivo de respaldo: ${(e as Error).message}`)
+    }
+  }
 
   function downloadBackup() {
     if (!backup) return
@@ -120,10 +142,15 @@ export function S3WritePage() {
   }
 
   const ask = (op: Op) => {
-    if (!backup || !testBytes || !base) return
+    if (!backup || !testBytes || !base || !restoreBytes) return
     const n = slot + 1
     if (op === 'test') setPending({ op, bytes: testBytes, approval: writeApproval(slot, testBytes, `Escribir patch de prueba "${TEST_NAME}" en la ranura ${n}`) })
-    if (op === 'restore') setPending({ op, bytes: base, approval: writeApproval(slot, base, `Restaurar la ranura ${n} desde el respaldo`) })
+    if (op === 'restore')
+      setPending({
+        op,
+        bytes: restoreBytes,
+        approval: writeApproval(slot, restoreBytes, `Restaurar la ranura ${n} a “${decodePatch60B(restoreBytes).name}” desde ${restoreFrom ? restoreFrom.label : 'el respaldo de esta sesión'}`),
+      })
     if (op === 'autosave') setPending({ op, bytes: testBytes, approval: autoSaveApproval(testBytes, slot) })
   }
 
@@ -157,7 +184,7 @@ export function S3WritePage() {
               ok: r.diff.length === 0,
               text:
                 (r.diff.length === 0 ? 'Lectura idéntica a lo escrito.' : `La lectura difiere en los bytes ${r.diff.join(', ')}.`) +
-                ` Ack: ${toHex(r.ack)}`,
+                (r.ack ? ` Ack: ${toHex(r.ack)}` : ' Sin ack del pedal.'),
             },
           ])
         }
@@ -210,6 +237,17 @@ export function S3WritePage() {
           <p>
             Prueba: renombrar “{base && decodePatch60B(base).name}” a “{TEST_NAME}” y alternar ON/OFF del efecto 1. Bytes
             que cambian: {diff.join(', ')}.
+          </p>
+          <p>
+            <label className="file">
+              Restaurar desde archivo (opcional)
+              <input type="file" accept=".json" onChange={(e) => e.target.files?.[0] && loadRestoreFile(e.target.files[0])} />
+            </label>{' '}
+            Restaurar escribe “{restoreBytes && decodePatch60B(restoreBytes).name}” desde{' '}
+            {restoreFrom ? restoreFrom.label : 'el respaldo de esta sesión'}.
+            {restoreFrom && (
+              <> Ranuras del pedal distintas al archivo: {changedVsFile.length ? changedVsFile.map((i) => i + 1).join(', ') : 'ninguna'}.</>
+            )}
           </p>
           <div className="bar">
             <button onClick={() => ask('test')} disabled={!canWrite}>4. Escribir prueba (0x28 + 0x32)…</button>

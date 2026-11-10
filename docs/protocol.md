@@ -193,3 +193,14 @@ Captura de solo lectura: `src/protocol/__fixtures__/ms60b-bank-2026-11-10-fw2.10
 - **No verificado con datos reales:** ningún patch del banco tiene un AMP de firmware 2, así que la regla del byte `v2 = 0x20` viene solo del código de g200kg.
 - **Camino de escritura:** `withApprovedWrites()` deja pasar los mensajes de lectura y exactamente los bytes 0x28/0x32 aprobados, en orden y una vez cada uno. Rechaza cualquier aprobación que contenga otra cosa (por ejemplo `0x31` o `0x60`).
 - **Página `#/s3`:** conectar → respaldar los 50 patches (solo lectura) → descargar el respaldo → escribir en una ranura elegida un patch de prueba (nombre "S3 TEST" y efecto 1 alternado) → leer desde memoria (cambiando a otra ranura y volviendo) → restaurar desde el respaldo. Opcional: prueba de AUTO SAVE (solo 0x28, esperar 3 s, cambiar de ranura y volver, leer). Al final de cada operación vuelve al patch activo original.
+
+### 9.1 Resultados con el pedal (2026-11-10, firmware 2.10, AUTO SAVE encendido)
+
+Dos sesiones en la ranura 33 ("Empty"), corridas por el usuario desde `#/s3`. Logs: `ms60b-s3-log-2026-11-10T20-41-31-802Z.json` y `…T20-46-04-337Z.json` (fuera del repo).
+
+- **Store `0x32` no devolvió ack.** Se envió 5 veces y no llegó ningún mensaje del pedal en los 1,5 s siguientes ni después. La página esperaba el ack de g200kg (`F0 52 00 5F 00 …`) y falló por timeout antes de releer. Cambio: el ack se registra si llega, pero la relectura decide.
+- **AUTO SAVE encendido guarda el `0x28` solo.** En las dos sesiones, después de `C0 20` + `0x28` sin Store, esperar 3 s y cambiar a la ranura 34 y volver, la ranura 33 tenía los bytes enviados. Confirma lo que advertía la §4: con AUTO SAVE encendido, cualquier `0x28` persiste.
+- **Ida y vuelta byte a byte:** los bytes generados por `encodePatch60B` (nombre "S3 TEST", efecto 1 alternado) volvieron idénticos desde la memoria del pedal.
+- **No verificado:** si Store `0x32` persiste por sí solo. Con AUTO SAVE encendido no se distingue de AUTO SAVE. Se verifica con AUTO SAVE apagado: `0x28` solo no debe persistir y `0x28` + `0x32` sí.
+- **Fuera de las pruebas:** el respaldo previo a la primera escritura ya mostraba cambios contra la captura de S1 en las ranuras 20 ("By Pauzz": de THRU a RackComp → BassDrive → SVT → Delay) y 24 ("Compressor" reemplazado por una copia de "By Pauzz"). No los hizo esta app: S1 es de solo lectura y esas ranuras ya estaban así antes de cualquier escritura de S3.
+- La ranura 33 quedó como "S3 TEST" (mismos bytes que "Empty" salvo el nombre). Se restaura desde la captura de S1.
