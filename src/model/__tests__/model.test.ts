@@ -142,3 +142,27 @@ describe('bank reducer (save model, spec §3)', () => {
     })
   })
 })
+
+describe('patches read from the pedal', () => {
+  it('all 50 real patches convert to the model and are saveable by the DSP estimate', async () => {
+    const { patchFromDevice } = await import('../fromDevice')
+    cap.patches.forEach((h) => {
+      const p = patchFromDevice(h.split(' ').map((x) => parseInt(x, 16)))
+      expect(p.blocks.length).toBeGreaterThanOrEqual(1)
+      expect(p.blocks.length).toBeLessThanOrEqual(4)
+      expect(canSave(p).ok).toBe(true)
+    })
+  })
+
+  it('loadSlot replace vs deviceOnly', () => {
+    let s = bankReducer(initBank(FAKE_FIRMWARE, fakeBank()), { type: 'edit', fn: (p) => toggleBlock(p, 0) })
+    const fromPedal: Patch = { name: 'PEDAL', blocks: [newBlock(byName('SVT'))] }
+    const kept = bankReducer(s, { type: 'loadSlot', index: 0, patch: fromPedal, raw: [1], mode: 'deviceOnly' })
+    expect(kept.slots[0].device).toBe(fromPedal)
+    expect(kept.slots[0].working).toBe(s.slots[0].working)
+    expect(kept.slots[0].raw).toEqual([1])
+    s = bankReducer(s, { type: 'loadSlot', index: 0, patch: fromPedal, raw: [2], mode: 'replace' })
+    expect(s.slots[0].working).toBe(fromPedal)
+    expect(isDirty(s.slots[0])).toBe(false)
+  })
+})

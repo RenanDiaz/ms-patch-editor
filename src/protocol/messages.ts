@@ -51,6 +51,26 @@ export function parseProgramChange(msg: ArrayLike<number>): number | null {
   return msg.length === 2 && msg[0] === 0xc0 ? msg[1] : null
 }
 
+export interface ParamEditEvent {
+  /** Effect slot 0..3. */
+  effect: number
+  /** 0 = on/off, 1 = type, 2..10 = params 1..9. */
+  param: number
+  value: number
+}
+
+/**
+ * Parses F0 52 00 5F 31 nn pp vL vM F7, which the pedal sends when a knob or
+ * effect switch is used on the pedal (index.html MidiIf.recv, docs/protocol.md §2.5).
+ * Parsing only: the app never sends 0x31 in v1.
+ */
+export function parseParamEdit(msg: ArrayLike<number>): ParamEditEvent | null {
+  if (msg.length !== 10 || msg[0] !== 0xf0 || msg[1] !== 0x52 || msg[2] !== 0x00 || msg[3] !== DEVICE_ID_60B || msg[4] !== 0x31 || msg[9] !== 0xf7) {
+    return null
+  }
+  return { effect: msg[5], param: msg[6], value: msg[7] + (msg[8] << 7) }
+}
+
 const eq = (a: ArrayLike<number>, b: ArrayLike<number>) =>
   a.length === b.length && Array.prototype.every.call(a, (v: number, i: number) => v === b[i])
 

@@ -4,6 +4,8 @@ import { canSave, MAX_BLOCKS, patchesEqual, type Patch } from './patch'
 export interface Slot {
   device: Patch
   working: Patch
+  /** The 105 bytes last read from the pedal for this slot (null for fake data). Save encodes over them (S3). */
+  raw: number[] | null
 }
 
 export interface BankState {
@@ -25,11 +27,17 @@ export type BankAction =
   | { type: 'save' }
   | { type: 'revert' }
   | { type: 'dismissError' }
+  /**
+   * A slot was (re)read from the pedal. 'replace' = device and working copy
+   * become the pedal's; 'deviceOnly' = only the device copy, the working copy
+   * keeps the user's changes (conflict resolved as "keep mine").
+   */
+  | { type: 'loadSlot'; index: number; patch: Patch; raw: number[]; mode: 'replace' | 'deviceOnly' }
 
-export function initBank(firmware: number, patches: Patch[]): BankState {
+export function initBank(firmware: number, patches: Patch[], raws?: number[][]): BankState {
   return {
     firmware,
-    slots: patches.map((p) => ({ device: p, working: p })),
+    slots: patches.map((p, i) => ({ device: p, working: p, raw: raws?.[i] ?? null })),
     current: 0,
     selectedBlock: 0,
     pendingSwitch: null,
@@ -53,7 +61,7 @@ function save(state: BankState): BankState {
   const slot = state.slots[state.current]
   const check = canSave(slot.working)
   if (!check.ok) return { ...state, saveError: check.reason ?? 'No se puede guardar.' }
-  return { ...replaceSlot(state, state.current, { device: slot.working, working: slot.working }), saveError: null }
+  return { ...replaceSlot(state, state.current, { ...slot, device: slot.working }), saveError: null }
 }
 
 function switchTo(state: BankState, index: number): BankState {
@@ -96,5 +104,11 @@ export function bankReducer(state: BankState, action: BankAction): BankState {
       }
     case 'dismissError':
       return { ...state, saveError: null }
+    case 'loadSlot': {
+      const old = state.slots[action.index]
+      const working = action.mode === 'replace' ? action.patch : old.working
+      const next = replaceSlot(state, action.index, { device: action.patch, working, raw: action.raw })
+      return action.index === state.current ? { ...next, selectedBlock: clampBlock(state.selectedBlock, working) } : next
+    }
   }
 }

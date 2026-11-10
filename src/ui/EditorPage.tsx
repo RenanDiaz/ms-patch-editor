@@ -13,7 +13,9 @@ import {
   toggleBlock,
   type Patch,
 } from '../model/patch'
+import type { PedalSession } from '../protocol/pedalSession'
 import { ParamKnob } from './ParamKnob'
+import { usePedalSync } from './usePedalSync'
 import { TypePicker } from './TypePicker'
 import './EditorPage.css'
 
@@ -23,10 +25,15 @@ interface Props {
   initial: () => BankState
   /** Shown in the header, e.g. "DATOS FALSOS". */
   sourceLabel: string
+  /** Real pedal (read-only in this version). Absent = fake data. */
+  pedal?: PedalSession
+  /** False while writing to the pedal is not available: Save is disabled with this reason. */
+  writeBlockedReason?: string
 }
 
-export function EditorPage({ initial, sourceLabel }: Props) {
+export function EditorPage({ initial, sourceLabel, pedal, writeBlockedReason }: Props) {
   const [state, dispatch] = useReducer(bankReducer, undefined, initial)
+  const sync = usePedalSync(pedal, state, dispatch)
   const [picker, setPicker] = useState<Picker>(null)
   const dragFrom = useRef<number | null>(null)
   const [dropAt, setDropAt] = useState<number | null>(null)
@@ -34,7 +41,8 @@ export function EditorPage({ initial, sourceLabel }: Props) {
   const slot = state.slots[state.current]
   const patch = slot.working
   const dirty = isDirty(slot)
-  const check = canSave(patch)
+  const dspCheck = canSave(patch)
+  const check = dspCheck.ok && writeBlockedReason ? { ok: false, reason: writeBlockedReason } : dspCheck
   const total = dspTotal(patch)
   const sel = Math.min(state.selectedBlock, patch.blocks.length - 1)
   const block = patch.blocks[sel]
@@ -74,7 +82,15 @@ export function EditorPage({ initial, sourceLabel }: Props) {
     <div className="editor">
       <header className="topbar">
         <div className="brand">
-          MS-60B Edit <span className="fake-badge" title="Prototipo S2: no hay pedal conectado">{sourceLabel}</span>
+          MS-60B Edit{' '}
+          <span className={pedal ? 'source-badge' : 'fake-badge'} title={pedal ? 'Pedal conectado' : 'Prototipo S2: no hay pedal conectado'}>
+            {sourceLabel}
+          </span>
+          {pedal && sync.pedalProgram !== null && (
+            <span className="muted pedal-at" title="Patch activo en el pedal">
+              {' '}· pedal en {String(sync.pedalProgram + 1).padStart(2, '0')} {state.slots[sync.pedalProgram]?.device.name}
+            </span>
+          )}
         </div>
         <div className="patch-title">
           <span className="slotnum">{String(state.current + 1).padStart(2, '0')}</span>
@@ -89,23 +105,41 @@ export function EditorPage({ initial, sourceLabel }: Props) {
           <span className={total > 1 ? 'bad' : ''}>{Math.round(total * 100)}%</span>
         </div>
         <div className="actions">
-          <button onClick={() => dispatch({ type: 'revert' })} disabled={!dirty}>
-            Revertir
+          <button
+            onClick={() => void sync.revert()}
+            disabled={(!dirty && !pedal) || sync.busy}
+            title={pedal ? 'Descarta los cambios y vuelve a leer el patch del pedal' : 'Descarta los cambios'}
+          >
+            {sync.busy ? 'Leyendo…' : 'Revertir'}
           </button>
           <button
             className="primary"
             onClick={() => dispatch({ type: 'save' })}
             disabled={!dirty || !check.ok}
-            aria-describedby={!check.ok ? 'save-block-reason' : undefined}
+            title={!check.ok ? check.reason : undefined}
+            aria-describedby={!dspCheck.ok ? 'save-block-reason' : undefined}
           >
             Guardar
           </button>
         </div>
       </header>
 
-      {(!check.ok || state.saveError) && (
+      {(!dspCheck.ok || state.saveError) && (
         <div className="banner bad" id="save-block-reason" role="alert">
-          <strong>Guardar bloqueado.</strong> {state.saveError ?? check.reason}
+          <strong>Guardar bloqueado.</strong> {state.saveError ?? dspCheck.reason}
+        </div>
+      )}
+      {sync.error && (
+        <div className="banner bad" role="alert">
+          {sync.error}
+        </div>
+      )}
+      {sync.conflict && (
+        <div className="banner warn" role="alert">
+          <strong>Conflicto en {String(sync.conflict.index + 1).padStart(2, '0')} “{state.slots[sync.conflict.index].working.name}”.</strong>{' '}
+          Cambiaste este patch en el pedal y aquí tienes cambios sin guardar. ¿Cuál conservas?{' '}
+          <button onClick={() => sync.resolveConflict('pedal')}>Usar la del pedal</button>{' '}
+          <button onClick={() => sync.resolveConflict('mine')}>Conservar la mía</button>
         </div>
       )}
 

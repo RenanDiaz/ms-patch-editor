@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import App from './App'
 
 afterEach(() => {
@@ -7,6 +7,12 @@ afterEach(() => {
 })
 
 describe('App routing', () => {
+  it('default route is the real-pedal editor: connect screen, no writes', () => {
+    render(<App />)
+    expect(screen.getByRole('button', { name: 'Conectar' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /demo/i })).toHaveAttribute('href', '#/demo')
+  })
+
   it('#/s1 shows the read-only S1 page with no write controls', () => {
     window.location.hash = '#/s1'
     render(<App />)
@@ -15,7 +21,11 @@ describe('App routing', () => {
   })
 })
 
-describe('S2 editor prototype (fake data)', () => {
+describe('S2 editor prototype (fake data, #/demo)', () => {
+  beforeEach(() => {
+    window.location.hash = '#/demo'
+  })
+
   it('is labelled as fake data and starts clean: Save and Revert disabled', () => {
     render(<App />)
     expect(screen.getByText('DATOS FALSOS')).toBeInTheDocument()
