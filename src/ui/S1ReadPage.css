@@ -1,0 +1,34 @@
+.s1 { max-width: 1200px; margin: 0 auto; padding: 20px 16px 48px; }
+.s1 h1 { font-size: 20px; margin: 0 0 4px; }
+.s1 h2 { font-size: 16px; margin: 0 0 4px; }
+.s1 h3 { font-size: 13px; margin: 0 0 6px; }
+.s1 .muted { color: var(--muted); }
+.s1 .ok { color: var(--ok); }
+.s1 .bad { color: var(--bad); }
+.s1 .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0; }
+.s1 button, .s1 .file {
+  font: inherit; padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--panel); color: var(--text); cursor: pointer;
+}
+.s1 button:disabled, .s1 .file.disabled { opacity: .5; cursor: default; }
+.s1 .file input { display: none; }
+.s1 .status { margin-left: auto; color: var(--muted); }
+.s1 .cols { display: grid; grid-template-columns: 220px 1fr; gap: 16px; }
+@media (max-width: 720px) { .s1 .cols { grid-template-columns: 1fr; } }
+.s1 .list { list-style: none; margin: 0; padding: 0; max-height: 70vh; overflow: auto;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
+.s1 .list button { display: flex; gap: 8px; width: 100%; border: 0; border-radius: 0; text-align: left; background: none; }
+.s1 .list button.sel { background: color-mix(in srgb, var(--accent) 15%, transparent); }
+.s1 .list .num { font-family: var(--mono); color: var(--muted); }
+.s1 .list .name { flex: 1; font-family: var(--mono); }
+.s1 .detail { min-width: 0; }
+.s1 .fx { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin: 10px 0; }
+.s1 .block { border: 1px solid var(--border); border-radius: 8px; padding: 10px; background: var(--panel); }
+.s1 .block.off h3 { color: var(--muted); }
+.s1 .block.unused { opacity: .5; }
+.s1 .block small { font-weight: normal; color: var(--muted); }
+.s1 table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.s1 td { padding: 2px 4px; border-top: 1px solid var(--border); }
+.s1 td:last-child { text-align: right; font-family: var(--mono); }
+.s1 pre { white-space: pre-wrap; word-break: break-all; font-family: var(--mono); font-size: 12px; }
+.s1 .diffs { border: 1px solid var(--bad); border-radius: 8px; padding: 10px; }
