@@ -350,6 +350,7 @@ function PatchName({ name, onRename }: { name: string; onRename: (n: string) => 
       className="pname pname-input"
       aria-label="Nombre del patch"
       autoFocus
+      onFocus={(e) => e.target.select()}
       value={draft}
       maxLength={NAME_MAX}
       onChange={(e) => setDraft(e.target.value.replace(/[^\x20-\x7e]/g, ''))}
