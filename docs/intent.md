@@ -31,7 +31,11 @@ Esto sigue a AX8-Edit y reemplaza el auto guardado de la utilidad de g200kg.
 - **Guardar** escribe el patch de trabajo en su ranura del pedal. **Revertir** descarta los cambios y vuelve a leer del pedal.
 - Cambiar de patch con cambios sin guardar pide confirmación: guardar, descartar o cancelar.
 - Si el usuario cambia algo en el pedal mientras hay cambios sin guardar en la app, la app muestra el conflicto y deja elegir cuál copia conservar.
-- **Pendiente de S0:** si el protocolo permite cambiar un parámetro en vivo sin persistirlo, la app puede escuchar cambios antes de guardar. Si no, la app solo puede escuchar lo que ya está en el pedal.
+- **Resuelto en S0 (ver `docs/protocol.md` §4):** sí existen mensajes para cambiar el buffer de edición sin persistir (`0x31`, `0x28`); solo `0x32` persiste. Ningún mensaje conocido lee los ajustes globales del pedal (AUTO SAVE incluido); el único sin descifrar, `0x60`, está prohibido.
+- **v1 sin escucha en vivo.** Mientras se edita, la app no envía `0x31` ni `0x28`; los cambios viven solo en la copia de trabajo. Guardar envía `C0 pp`, `0x28` y `0x32`. Funciona con AUTO SAVE del pedal encendido o apagado; no es requisito apagarlo.
+- **Escucha en vivo opcional.** Un modo que envía `0x31`/`0x28` en cada cambio. Al activarlo, la app pide al usuario confirmar que AUTO SAVE está apagado, porque no lo puede comprobar.
+- **Verificación en S3** (con aprobación): si AUTO SAVE persiste los cambios que llegan por MIDI. Si no los persiste, se quita el aviso del modo en vivo.
+- **Cambios hechos en el pedal** con AUTO SAVE encendido los guarda el pedal por su cuenta. La app solo los detecta (el pedal emite `0x31`) y los muestra como conflicto, según la regla anterior.
 
 ## 4. Alcance v1
 
