@@ -204,3 +204,27 @@ Dos sesiones en la ranura 33 ("Empty"), corridas por el usuario desde `#/s3`. Lo
 - **No verificado:** si Store `0x32` persiste por sí solo. Con AUTO SAVE encendido no se distingue de AUTO SAVE. Se verifica con AUTO SAVE apagado: `0x28` solo no debe persistir y `0x28` + `0x32` sí.
 - **Fuera de las pruebas:** el respaldo previo a la primera escritura ya mostraba cambios contra la captura de S1 en las ranuras 20 ("By Pauzz": de THRU a RackComp → BassDrive → SVT → Delay) y 24 ("Compressor" reemplazado por una copia de "By Pauzz"). No los hizo esta app: S1 es de solo lectura y esas ranuras ya estaban así antes de cualquier escritura de S3.
 - La ranura 33 quedó como "S3 TEST" (mismos bytes que "Empty" salvo el nombre). Se restaura desde la captura de S1.
+
+### 9.2 Segunda ronda (2026-11-10, ejecutada por Claude en el Chrome del usuario, con su aprobación)
+
+Log: `ms60b-s3-log-2026-11-10T21-08-11-220Z.json` (fuera del repo). Siempre en la ranura 33.
+
+| Paso | AUTO SAVE | Resultado |
+|---|---|---|
+| Restaurar "Empty" (`C0 20`, `0x28`, `0x32`) | OFF | Relectura idéntica |
+| Solo `0x28` ("S3 TEST"), cambiar a 34 y volver, leer | OFF | La ranura tiene "S3 TEST" |
+| Reiniciar el pedal, leer (solo lectura) | OFF | Sigue "S3 TEST" |
+| Restaurar "Empty" | OFF | Relectura idéntica |
+| Solo `0x28`, cambiar y volver, leer | ON | "S3 TEST" |
+| Reiniciar el pedal, leer | ON | Sigue "S3 TEST" |
+| Restaurar "Empty" | ON | Relectura idéntica; igual a la captura de S1 |
+
+**Correcciones a §4 y §9.1:**
+
+- **`0x28` persiste por sí solo**, con AUTO SAVE encendido o apagado, y sobrevive un reinicio. No está probado si se guarda al recibirlo o al salir del patch; en las pruebas siempre se cambió de patch antes de reiniciar. §9.1 lo atribuía a AUTO SAVE: era incorrecto, AUTO SAVE estaba apagado en esas pruebas. Esto también explica los cambios en las ranuras 20 y 24: la utilidad de g200kg envía `0x28` en cada clic aunque su AutoSave esté apagado.
+- **Store sí tiene ack:** `F0 52 00 5F 00 00 F7`, unos 2,5 s después del `0x32` (2,52 s en las 3 escrituras). En §9.1 no apareció porque la página dejaba de escuchar a los 1,5 s. Ahora se espera hasta 4 s y la relectura decide.
+- **No aislado:** qué agrega Store si el `0x28` ya persiste. Lo que sí se observó es que el pedal solo confirma con ack cuando recibe Store.
+- **Consecuencias:**
+  - `0x28` pasa a la clase "escritura persistente" en `CLAUDE.md`.
+  - Un modo en vivo basado en `0x28` guardaría cada cambio en la ranura.
+  - El único candidato para escuchar en vivo sin persistir es `0x31`, sin probar.

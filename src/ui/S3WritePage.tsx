@@ -169,7 +169,7 @@ export function S3WritePage() {
               op: p.op,
               ok: true,
               text: r.persisted
-                ? 'AUTO SAVE guardó el 0x28 sin Store: la ranura quedó con el patch de prueba. Restaura la ranura.'
+                ? 'El pedal guardó el 0x28 sin Store: la ranura quedó con el patch de prueba. Restaura la ranura.'
                 : same
                   ? 'No persistió: la ranura sigue igual al respaldo. El 0x28 solo cambia el buffer.'
                   : `La ranura no coincide ni con el respaldo ni con la prueba (bytes ${diffOffsets(r.stored, base!).join(', ')}). Restaura la ranura.`,
@@ -252,7 +252,7 @@ export function S3WritePage() {
           <div className="bar">
             <button onClick={() => ask('test')} disabled={!canWrite}>4. Escribir prueba (0x28 + 0x32)…</button>
             <button onClick={() => ask('restore')} disabled={!canWrite}>5. Restaurar ranura desde respaldo…</button>
-            <button onClick={() => ask('autosave')} disabled={!canWrite}>Opcional: prueba AUTO SAVE (solo 0x28)…</button>
+            <button onClick={() => ask('autosave')} disabled={!canWrite}>Opcional: prueba solo 0x28, sin Store…</button>
             <button onClick={() => download(`ms60b-s3-log-${stamp()}.json`, { format: 'ms60b-s3-log/1', slot, results, log: logJson() })}>
               Descargar log
             </button>

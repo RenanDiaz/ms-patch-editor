@@ -1,8 +1,8 @@
 /*
  * S3 controlled-write procedures. Message order follows g200kg's StoreAll
  * (index.html:1659-1680, commit 5bf930c8e1622b0c70c0c3d761424f84955a227a):
- * Program Change, Send Patch 0x28, Store 0x32. g200kg waits for an ack; the
- * MS-60B fw 2.10 sent none, so here the read-back decides. Differences: every write goes through withApprovedWrites() with the exact
+ * Program Change, Send Patch 0x28, Store 0x32, ack. The fw 2.10 ack takes
+ * ~2.5 s; it is awaited up to 4 s and the read-back decides. Differences: every write goes through withApprovedWrites() with the exact
  * bytes, the slot is read back from memory after switching away and back,
  * and the original program is restored at the end.
  *
@@ -136,7 +136,7 @@ export const writeApproval = (slot: number, bytes: ArrayLike<number>, label: str
 })
 
 export interface WriteResult {
-  /** Store acknowledgement, if any arrived. The MS-60B fw 2.10 sent none in 5 attempts (docs/protocol.md §9). */
+  /** Store acknowledgement, if it arrived. MS-60B fw 2.10: F0 52 00 5F 00 00 F7 about 2.5 s after Store (docs/protocol.md §9.2). */
   ack: number[] | null
   readBack: number[]
   /** Byte offsets where readBack differs from what was written. */
@@ -147,16 +147,16 @@ export const diffOffsets = (a: ArrayLike<number>, b: ArrayLike<number>) =>
   Array.from({ length: Math.max(a.length, b.length) }, (_, i) => i).filter((i) => a[i] !== b[i])
 
 /**
- * C0 pp → 0x28 → 0x32 → wait → read back from memory. Needs the approval
- * built by writeApproval() for these bytes. The ack is recorded if it comes
- * but not required: success is decided by the read-back.
+ * C0 pp → 0x28 → 0x32 → wait for the ack (up to ackTimeoutMs) → read back
+ * from memory. Needs the approval built by writeApproval() for these bytes.
+ * The ack is recorded but success is decided by the read-back.
  */
 export function writeSlot(
   ctx: S3Context,
   slot: number,
   bytes: ArrayLike<number>,
   approval: WriteApproval,
-  settleMs = 1500,
+  ackTimeoutMs = 4000,
 ): Promise<WriteResult> {
   const io = withApprovedWrites(ctx.transport, approval)
   return withSession(ctx, io, async (s) => {
@@ -164,9 +164,9 @@ export function writeSlot(
     await s.send(sendPatch(bytes))
     const from = s.log.length
     await s.send(storePatch(slot))
-    await s.sleep(settleMs)
-    const ackEntry = s.log.slice(from).find((l) => l.dir === 'in' && isStoreAck(l.bytes))
-    const ack = ackEntry ? ackEntry.bytes : null
+    const findAck = () => s.log.slice(from).find((l) => l.dir === 'in' && isStoreAck(l.bytes))
+    for (let waited = 0; !findAck() && waited < ackTimeoutMs; waited += 100) await s.sleep(100)
+    const ack = findAck()?.bytes ?? null
     if (io.pending() !== 0) throw new S3Error('quedaron escrituras aprobadas sin enviar')
     const readBack = await readStored(s, slot)
     return { ack, readBack, diff: diffOffsets(bytes, readBack) }
@@ -185,9 +185,10 @@ export interface AutoSaveResult {
 }
 
 /**
- * AUTO SAVE probe (spec §3, S3): C0 pp → 0x28 (no Store) → wait → switch
- * away and back → read. If the slot now holds the sent bytes, the pedal
- * persisted a MIDI change by itself.
+ * Send-only probe (spec §3, S3): C0 pp → 0x28 (no Store) → wait → switch
+ * away and back → read. If the slot now holds the sent bytes, the pedal kept
+ * the 0x28 without Store. On fw 2.10 it does, with AUTO SAVE ON or OFF, and
+ * it survives a power cycle (docs/protocol.md §9.2).
  */
 export function autoSaveProbe(
   ctx: S3Context,

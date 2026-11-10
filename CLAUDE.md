@@ -29,8 +29,8 @@ Agreed with the user. See `docs/protocol.md` for bytes and sources.
 |---|---|---|
 | Read | Identity Request, Request Current Program `0x33`, Request Patch `0x29` | Allowed |
 | Read with notice | Program Change `Cn pp`, Parameter Edit Enable/Disable `0x50`/`0x51` | Allowed during a read scan; tell the user before a hardware test, restore the original active patch at the end |
-| Write (not persisted) | Send Patch `0x28`, Parameter Edit `0x31` | Needs explicit approval |
-| Write (persisted) | Store Patch `0x32` | Needs explicit approval |
+| Write (persistence untested) | Parameter Edit `0x31` | Needs explicit approval |
+| Write (persisted) | Send Patch `0x28` (persists by itself on fw 2.10, AUTO SAVE ON or OFF), Store Patch `0x32` | Needs explicit approval |
 | Forbidden | Unknown `0x60`, anything firmware/update related | Never send |
 
 Enforced in code by `src/transport/readOnlyGuard.ts` (`readOnly()`): every scan goes through it. The only write path is `src/transport/approvedWrites.ts` (`withApprovedWrites()`): it lets through exactly the approved 0x28/0x32 bytes, in order, once each. Never call it without the user's approval for that operation.
