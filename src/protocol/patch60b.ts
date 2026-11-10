@@ -24,7 +24,7 @@ export const VALUES_PER_EFFECT = 11
 type BitSpan = readonly [number, number, number | 'NZ']
 
 /** apatch.prototype.bits, effects 0..3 only (effects 4..5 are MS-50G/70CDR). js/apatch.js:42-107 */
-const BITS: readonly (readonly (readonly BitSpan[])[])[] = [
+export const BITS: readonly (readonly (readonly BitSpan[])[])[] = [
   [ // eff0
     [[6, 1, 0]], // State
     [[5, 0x40, 24], [6, 0x7e, 16], [7, 0x07, 8], [9, 0x1f, 0]], // ID

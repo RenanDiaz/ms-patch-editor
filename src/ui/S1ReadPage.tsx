@@ -46,6 +46,8 @@ export function S1ReadPage() {
     try {
       const cap = await scanBank(t, { onProgress: (slot) => setStatus({ kind: 'scanning', ports, slot }) })
       setCapture(cap)
+      // Dev-only hook so the capture can be pulled from devtools for fixtures.
+      if (import.meta.env.DEV) (window as unknown as { __s1Capture?: BankCapture }).__s1Capture = cap
       setSelected(cap.originalProgram)
       setStatus({ kind: 'connected', ports })
     } catch (e) {

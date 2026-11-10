@@ -153,17 +153,30 @@ Fuente principal: tablas `bits`, `namidx`, `cabbyte`, `v2byte`, `maxfxidx` y fun
 
 ## 6. Pendientes (no verificados)
 
-1. Todo el documento contra el pedal real (S1 para lectura, S3 para escritura).
+1. Lectura verificada con el pedal real en S1 (§8). Escritura pendiente de S3.
 2. Si AUTO SAVE del pedal persiste cambios hechos por MIDI (§4).
 3. Si `0x31` funciona en el efecto 4 del 60B.
 4. Qué hace Edit Enable `0x50` exactamente y si hay que enviar Disable `0x51` al desconectar.
 5. Si Store `0x32` con `pp` distinto del patch actual guarda el buffer en esa ranura.
 6. El contenido completo del ack de Store (`F0 52 00 5F 00 …`).
 7. Tiempos mínimos entre mensajes; g200kg usa 80 ms por mensaje sin timeouts.
-8. Si la respuesta de Identity Reply del 60B coincide con la de `midimessage.md`, y qué tablas cambian según la versión de firmware además del gabinete.
+8. Qué tablas cambian según la versión de firmware además del gabinete. (El pedal tiene firmware 2.10; ver §8.)
 9. Que los rangos de `effectslist.js` coinciden con el pedal (procedimiento manual: llevar la perilla al extremo en el pedal y leer).
 10. Nombres de efectos: cruzar `effectslist.js` con el manual (pp. 24-28, "Effect Types") en S2.
 
 ## 7. Atribución
 
 El protocolo y las tablas provienen de zoom-ms-utility de g200kg, MIT License, "Copyright (c) 2017" (el archivo `LICENSE` no incluye un nombre de titular). El código que se porte llevará el aviso MIT en cada archivo y se listará en `THIRD_PARTY_NOTICES.md` (se crea en S1, cuando se porte el primer archivo).
+
+## 8. Resultados de S1 con el pedal real (2026-11-10)
+
+Captura de solo lectura: `src/protocol/__fixtures__/ms60b-bank-2026-11-10-fw2.10.json`.
+
+- **Identity Reply:** `F0 7E 00 06 02 52 5F 00 00 00 32 2E 31 30 F7` → MS-60B, firmware **2.10**. `midimessage.md` documentaba la 1.00. Con firmware 2.x g200kg usa la segunda tabla de gabinetes (`bampcab[1]`).
+- **Secuencia:** se enviaron exactamente Identity Request, `0x50`, `0x33`, 50 × (`C0 pp` + `0x29`) y `C0 1B` para volver al patch activo, que era el 28. Se recibieron 50 respuestas `0x28` de 105 bytes, sin reintentos. Duración: unos 8,7 s.
+- **`0x33`:** el pedal respondió `B0 00 00`, `B0 20 00`, `C0 1B`, como dice §2.1.
+- **Decodificación:** el port coincide con el `ReadBin` de g200kg en los 50 patches reales. Todos los efectos existen en la tabla del 60B para firmware ≤ 2, ningún parámetro sale del rango de g200kg y los parámetros sin uso valen 0. Ningún patch tiene bits de DSP lleno.
+- **Bits que ningún campo decodificado lee:**
+  - El byte 90 vale `0x0F` en los 50 patches. Coincide con la plantilla `empty105`.
+  - El bit `0x10` de los bytes de gabinete 43 y 64 aparece en patches con AMP; forma parte del valor `0x50`/`0x51` que `MakeBin` recalcula.
+- **`MakeBin` de g200kg altera bytes reales.** Si se pasan los 50 patches por `ReadBin` y luego por `MakeBin`, 42 quedan idénticos y 8 no (patches 2, 3, 4, 7, 8, 11, 14, 16). En los 8 casos se pone `0x40` en un byte de gabinete (23, 43, 64 u 84) donde el pedal tiene `0x00`. La causa es el tramo `"NZ"` (`js/apatch.js:53` y equivalentes): marca el bit cuando el parámetro 8 ≠ 0 aunque el efecto no sea un AMP. Esto confirma la decisión de §3: escribir modificando los bytes leídos, no desde plantilla. Qué hace el pedal con ese bit se verifica en S3.
