@@ -251,3 +251,29 @@ Aprobadas por el usuario y ejecutadas por Claude en su Chrome, siempre en la ran
 - Si el usuario cambia de patch en el propio pedal mientras edita en vivo, el pedal ya habrá guardado la versión editada en la ranura anterior. La app lo detecta por el `C0` y tiene que restaurar esa ranura, o al menos avisar.
 - Si la app se cierra mientras el pedal está en el patch editado, el cambio solo queda guardado si después se cambia de patch en el pedal. Si se apaga el pedal, se pierde.
 - `0x31` no sirve para el efecto 4. Para ese efecto, y para cambios de cadena (tipo, orden, agregar, quitar), se usa `0x28`.
+
+### 9.4 Escucha en vivo en el editor, con el pedal (2026-11-10)
+
+Prueba aprobada por el usuario en la ranura 33 (copia de "Octaver" con 4 efectos, nombre "S3 TEST"), ejecutada por Claude en su Chrome. Al final, la 33 se restauró a la captura de S1 (relectura idéntica, ack).
+
+| Caso | Mensajes enviados | Resultado |
+|---|---|---|
+| Perilla del efecto 1 | `0x31 00 02 51` | OK |
+| Perilla del efecto 4 | un `0x28` | OK |
+| Bypass del efecto 2 | un `0x28` | OK |
+| Revertir | `0x28` original, `0x29` | Limpio; relectura = original |
+| Cambiar a la 34 y descartar | `0x31`, `0x28` original, `C0 21`, `C0 20`, `0x29`, `C0 21` | 33 verificada = original |
+| Cambio de patch hecho en el pedal (AUTO SAVE ON) | detectado por sondeo `0x33`; `C0 20`, `0x28` original, `C0 1F`, `C0 20`, `0x29`, `C0 1F` | 33 verificada = original; la app siguió al pedal a la 32 y la edición quedó "sin guardar" |
+| Guardar | `C0 20`, `0x28`, `0x32`, ack, `C0 21`, `C0 20`, `0x29` | Relectura idéntica |
+
+**Hallazgos:**
+
+- **El pedal no avisa cuando se cambia de patch en él.** Ni la perilla ni el footswitch generan mensajes; hay que sondear con `0x33`, como hace g200kg. La app sondea cada 250 ms mientras no hay otra operación.
+- **Con AUTO SAVE OFF, un cambio de patch hecho en el pedal descartó la edición recibida por MIDI.** En cambio, un `C0` recibido por MIDI la guarda (§9.3). Con AUTO SAVE ON no se pudo distinguir si el pedal guardó la edición, porque la app restauró la ranura; el resultado final fue el original en ambos casos.
+- **Chrome limita los temporizadores de una pestaña en segundo plano a uno por segundo.** Con la app en segundo plano, leer el banco tarda unos 100 s, y el sondeo y los envíos en vivo se vuelven lentos.
+- **Incidente durante la prueba:** el servidor de desarrollo recargó el editor en caliente mientras estaba conectado. El editor creyó que el pedal seguía en la 33 cuando el usuario ya lo había pasado a la 32, y envió `0x31 00 02 51` a la 32. Resultado: la ranura 32 "Swells" quedó con SlwAtkDly 81 en lugar de 489. Correcciones:
+  - cada envío en vivo confirma antes el patch activo con `0x33`, y si no coincide no envía nada (`WrongPatchError`);
+  - las sesiones se cierran cuando se recarga en caliente el módulo;
+  - la restauración de emergencia al cerrar la página solo actúa sobre el patch que la app sabe que está activo.
+
+  La ranura 32 se puede restaurar desde la captura de S1, con aprobación.

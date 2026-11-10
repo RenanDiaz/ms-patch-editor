@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import cap from '../__fixtures__/ms60b-bank-2026-11-10-fw2.10.json'
 import { fakePedal } from '../../test/fakePedal'
 import { isAllowedReadMessage, parseParamEdit } from '../messages'
-import { PedalSession, WrongPatchError, type PedalEvent } from '../pedalSession'
+import { PedalSession, SessionClosedError, WrongPatchError, type PedalEvent } from '../pedalSession'
 import { sendPatch } from '../writeMessages'
 
 const fast = { gapMs: 0, timeoutMs: 50, sleep: () => Promise.resolve(), now: () => 0 }
@@ -87,6 +87,16 @@ describe('PedalSession (simulated pedal)', () => {
     const s = new PedalSession(pedal.transport, fast)
     await s.scan()
     s.emergencyRestore(3, pedal.memory[3])
+    expect(pedal.sent.filter((m) => !isAllowedReadMessage(m))).toEqual([])
+  })
+
+  it('a closed session cannot write', async () => {
+    const pedal = fakePedal()
+    const s = new PedalSession(pedal.transport, fast)
+    await s.scan()
+    s.close()
+    await expect(s.sendLive(cap.originalProgram, [sendPatch(pedal.memory[0])])).rejects.toBeInstanceOf(SessionClosedError)
+    s.emergencyRestore(cap.originalProgram, pedal.memory[0])
     expect(pedal.sent.filter((m) => !isAllowedReadMessage(m))).toEqual([])
   })
 })

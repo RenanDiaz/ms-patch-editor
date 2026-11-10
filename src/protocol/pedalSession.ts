@@ -25,6 +25,20 @@ export class WrongPatchError extends Error {
   }
 }
 
+/** Open sessions, closed when this module is hot-replaced in development (see dispose below). */
+const openSessions = new Set<PedalSession>()
+if (import.meta.hot) {
+  // A hot reload while connected must not leave an old session able to write
+  // with stale state (found while testing: a stale active patch sent an edit to the wrong slot).
+  import.meta.hot.dispose(() => openSessions.forEach((s) => s.close()))
+}
+
+export class SessionClosedError extends Error {
+  constructor() {
+    super('La conexión con el pedal se cerró: vuelve a conectar.')
+  }
+}
+
 export type PedalEvent = { type: 'program'; slot: number } | ({ type: 'param' } & ParamEditEvent)
 
 const LOG_LIMIT = 2000
@@ -54,7 +68,10 @@ export class PedalSession {
     this.clock = () => performance.now()
     this.t0 = (opts.now ?? this.clock)()
     this.unsubscribe = this.io.onMessage((m) => this.onIdleMessage(m))
+    openSessions.add(this)
   }
+
+  private closed = false
 
   /** Messages that arrive while no operation runs are the pedal's own events (or replies to polling). */
   private onIdleMessage(m: MidiMessage) {
@@ -82,6 +99,7 @@ export class PedalSession {
   /** Runs operations one at a time; pedal events are ignored while one runs. */
   private exclusive<T>(fn: () => Promise<T>): Promise<T> {
     const run = async () => {
+      if (this.closed) throw new SessionClosedError()
       this.busy++
       try {
         return await fn()
@@ -180,7 +198,7 @@ export class PedalSession {
    * when the page is closing (no awaiting possible). Not verified.
    */
   emergencyRestore(slot: number, bytes: ArrayLike<number>) {
-    if (this.activeProgram !== slot) return
+    if (this.closed || this.activeProgram !== slot) return
     const m = Uint8Array.from(bytes)
     withApprovedWrites(this.raw, { label: 'Restaurar al cerrar', writes: [m] }).send(m)
   }
@@ -202,6 +220,8 @@ export class PedalSession {
   }
 
   close() {
+    this.closed = true
+    openSessions.delete(this)
     this.stopPolling()
     this.unsubscribe()
     this.listeners.clear()
