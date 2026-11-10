@@ -88,8 +88,9 @@ export function S3WritePage() {
       cap.log.forEach((l) => logRef.current.push(l))
       setBackup(cap)
       setDownloaded(false)
-      // Prefer a slot the user keeps empty (THRU only), e.g. "Empty".
-      const empty = cap.patches.findIndex((p) => decodePatch60B(p).effects.slice(0, 1).every((e) => e.id === 0))
+      // Prefer the slot named "Empty", else the first THRU-only patch.
+      const named = cap.patches.findIndex((p) => /^empty$/i.test(decodePatch60B(p).name))
+      const empty = named >= 0 ? named : cap.patches.findIndex((p) => decodePatch60B(p).effects[0].id === 0)
       if (empty >= 0) setSlot(empty)
       if (cap.identity.version !== '2.10') setError(`Firmware ${cap.identity.version}: las pruebas se prepararon con 2.10.`)
     })
