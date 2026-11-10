@@ -32,3 +32,37 @@ export const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.ma
 
 /** Coarse step for PageUp/PageDown and wheel: ~10% of the range, at least 1. */
 export const coarseStep = (steps: number) => Math.max(1, Math.round((steps - 1) / 10))
+
+/** How a parameter is shown: two-state switch, list (labels/cabinets) or number. */
+export function paramKind(def: ParamDef, firmware: number): 'toggle' | 'list' | 'number' {
+  const steps = paramScale(def, firmware).steps
+  if (steps === 2) return 'toggle'
+  if (def.range.kind === 'cab' || Array.isArray(def.disp)) return 'list'
+  return 'number'
+}
+
+/**
+ * Raw value for what the user typed: an exact label match (case-insensitive),
+ * otherwise the position whose shown number is closest. null if nothing fits.
+ */
+export function parseTyped(scale: ParamScale, text: string): number | null {
+  const t = text.trim().toLowerCase()
+  if (!t) return null
+  const raws = Array.from({ length: scale.steps }, (_, p) => scale.toRaw(p))
+  const exact = raws.find((r) => scale.label(r).toLowerCase() === t)
+  if (exact !== undefined) return exact
+  const n = parseFloat(t.replace(',', '.'))
+  if (Number.isNaN(n)) return null
+  let best: number | null = null
+  let dist = Infinity
+  for (const r of raws) {
+    const v = parseFloat(scale.label(r))
+    if (Number.isNaN(v)) continue
+    const d = Math.abs(v - n)
+    if (d < dist) {
+      dist = d
+      best = r
+    }
+  }
+  return best
+}

@@ -97,6 +97,10 @@
 .knob-pointer { stroke: var(--e-accent); stroke-width: 3; stroke-linecap: round; }
 .param-value { font-family: var(--mono); font-size: 14px; }
 .param-value.changed { color: var(--e-accent); }
+.editor .param-toggle { padding: 1px 10px; font-family: var(--mono); font-size: 13px; }
+.param-select { max-width: 120px; background: var(--e-panel2); color: var(--e-text); border: 1px solid var(--e-line); border-radius: 4px; font-size: 12px; }
+.param-select.changed { color: var(--e-accent); }
+.param-input { width: 7ch; text-align: center; background: var(--e-panel2); color: var(--e-text); border: 1px solid var(--e-accent); border-radius: 4px; }
 .param-range { font-size: 11px; color: var(--e-muted); }
 
 .editor dialog { background: var(--e-panel); color: var(--e-text); border: 1px solid var(--e-line); border-radius: 12px; padding: 16px; }

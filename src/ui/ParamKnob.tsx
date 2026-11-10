@@ -1,6 +1,6 @@
-import { useEffect, useRef, type KeyboardEvent, type PointerEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import type { ParamDef } from '../protocol/effectTypes'
-import { clamp, coarseStep, paramScale } from './paramControl'
+import { clamp, coarseStep, paramKind, paramScale, parseTyped } from './paramControl'
 
 interface Props {
   def: ParamDef
@@ -10,14 +10,22 @@ interface Props {
 }
 
 /**
- * Value control: vertical drag (Shift = fine), mouse wheel (Shift = fine),
- * keyboard (arrows ±1, PageUp/PageDown coarse, Home/End), double-click = default.
+ * Value control, following common plugin conventions:
+ * - knob: vertical drag (Shift = fine), wheel (Shift = fine), arrows ±1,
+ *   PageUp/PageDown coarse, Home/End; double-click, Alt/Option+click or
+ *   Delete/Backspace = default value;
+ * - value: double-click to type a number (Enter applies, Esc cancels, clamped);
+ * - two-state parameters: a switch, click toggles;
+ * - labelled parameters (cabinets, lists): a drop-down.
  */
 export function ParamKnob({ def, raw, firmware, onChange }: Props) {
   const scale = paramScale(def, firmware)
   const pos = scale.toPos(raw)
   const last = scale.steps - 1
   const drag = useRef<{ y: number; pos: number } | null>(null)
+  const kind = paramKind(def, firmware)
+  const [typing, setTyping] = useState<string | null>(null)
+  const toDefault = () => setPos(scale.toPos(def.def))
 
   const setPos = (p: number) => {
     const next = scale.toRaw(clamp(p, 0, last))
@@ -25,6 +33,10 @@ export function ParamKnob({ def, raw, firmware, onChange }: Props) {
   }
 
   const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
+    if (e.altKey) {
+      toDefault()
+      return
+    }
     e.currentTarget.setPointerCapture(e.pointerId)
     drag.current = { y: e.clientY, pos }
   }
@@ -63,6 +75,7 @@ export function ParamKnob({ def, raw, firmware, onChange }: Props) {
     if (e.key in step) setPos(pos + step[e.key])
     else if (e.key === 'Home') setPos(0)
     else if (e.key === 'End') setPos(last)
+    else if (e.key === 'Delete' || e.key === 'Backspace') toDefault()
     else return
     e.preventDefault()
   }
@@ -87,8 +100,8 @@ export function ParamKnob({ def, raw, firmware, onChange }: Props) {
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
         onKeyDown={onKeyDown}
-        onDoubleClick={() => setPos(scale.toPos(def.def))}
-        title="Arrastra o usa la rueda (Shift = fino), flechas, RePág/AvPág. Doble clic = valor por defecto."
+        onDoubleClick={toDefault}
+        title="Arrastra o usa la rueda (Shift = fino), flechas, RePág/AvPág. Doble clic, Alt+clic o Supr = valor por defecto."
       >
         <svg viewBox="0 0 40 40" aria-hidden="true">
           <circle cx="20" cy="20" r="16" className="knob-track" />
@@ -96,7 +109,53 @@ export function ParamKnob({ def, raw, firmware, onChange }: Props) {
           <line x1="20" y1="20" x2="20" y2="9" className="knob-pointer" transform={`rotate(${angle} 20 20)`} />
         </svg>
       </div>
-      <div className={`param-value ${isDefault ? '' : 'changed'}`}>{scale.label(raw)}</div>
+      {kind === 'toggle' ? (
+        <button
+          className={`param-value param-toggle ${isDefault ? '' : 'changed'}`}
+          aria-label={`${def.name}: ${scale.label(raw)} (clic para cambiar)`}
+          onClick={() => setPos(pos === 0 ? 1 : 0)}
+        >
+          {scale.label(raw)}
+        </button>
+      ) : kind === 'list' ? (
+        <select
+          className={`param-value param-select ${isDefault ? '' : 'changed'}`}
+          aria-label={`${def.name} (lista)`}
+          value={pos}
+          onChange={(e) => setPos(Number(e.target.value))}
+        >
+          {Array.from({ length: scale.steps }, (_, p) => (
+            <option key={p} value={p}>
+              {scale.label(scale.toRaw(p))}
+            </option>
+          ))}
+        </select>
+      ) : typing !== null ? (
+        <input
+          className="param-value param-input"
+          aria-label={`${def.name} (escribir valor)`}
+          autoFocus
+          onFocus={(e) => e.target.select()}
+          value={typing}
+          onChange={(e) => setTyping(e.target.value)}
+          onBlur={() => setTyping(null)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              const r = parseTyped(scale, typing)
+              if (r !== null && r !== raw) onChange(r)
+              setTyping(null)
+            } else if (e.key === 'Escape') setTyping(null)
+          }}
+        />
+      ) : (
+        <div
+          className={`param-value ${isDefault ? '' : 'changed'}`}
+          title="Doble clic para escribir un valor"
+          onDoubleClick={() => setTyping(scale.label(raw))}
+        >
+          {scale.label(raw)}
+        </div>
+      )}
       <div className="param-range">
         {scale.label(scale.toRaw(0))} … {scale.label(scale.toRaw(last))}
         <span className="param-def"> · def {scale.label(def.def)}</span>
