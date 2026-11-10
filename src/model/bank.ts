@@ -1,3 +1,4 @@
+import { decodePatch60B } from '../protocol/patch60b'
 import { canSave, MAX_BLOCKS, patchesEqual, type Patch } from './patch'
 
 /** Spec §3: each patch has the pedal's copy and the app's working copy. */
@@ -68,8 +69,15 @@ function save(state: BankState): BankState {
   return { ...replaceSlot(state, state.current, { ...slot, device: slot.working }), saveError: null }
 }
 
+/** The effect the pedal has selected in this patch (focus bits of the bytes read), or 0. */
+export function focusOf(slot: Slot): number {
+  if (!slot.raw) return 0
+  const f = decodePatch60B(slot.raw).focus
+  return Math.max(0, Math.min(f, slot.working.blocks.length - 1))
+}
+
 function switchTo(state: BankState, index: number): BankState {
-  return { ...state, current: index, selectedBlock: 0, pendingSwitch: null }
+  return { ...state, current: index, selectedBlock: focusOf(state.slots[index]), pendingSwitch: null }
 }
 
 export function bankReducer(state: BankState, action: BankAction): BankState {

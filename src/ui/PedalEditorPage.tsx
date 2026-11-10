@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { initBank, type BankState } from '../model/bank'
+import { focusOf, initBank, type BankState } from '../model/bank'
 import { patchFromDevice } from '../model/fromDevice'
 import { PedalSession } from '../protocol/pedalSession'
 import type { WebMidiConnection } from '../transport/webMidi'
@@ -43,7 +43,8 @@ export function PedalEditorPage({ connect = connectWebMidi, sessionOptions, live
       const cap = await session.scan((slot) => setPhase({ kind: 'busy', text: `Leyendo ${Math.min(slot + 1, 50)}/50…` }))
       session.startPolling(sessionOptions?.gapMs === 0 ? 20 : 250)
       const patches = cap.patches.map(patchFromDevice)
-      const initial = { ...initBank(cap.identity.firmware, patches, cap.patches), current: cap.originalProgram }
+      const bank = initBank(cap.identity.firmware, patches, cap.patches)
+      const initial = { ...bank, current: cap.originalProgram, selectedBlock: focusOf(bank.slots[cap.originalProgram]) }
       setPhase({ kind: 'ready', session, initial, ports: `${c.inputName}` })
     } catch (e) {
       setPhase({ kind: 'error', message: (e as Error).message })

@@ -78,6 +78,10 @@ export function fakePedal(opts: { current?: number } = {}) {
       if (newBytes) buffer = newBytes
       deliver([0xf0, 0x52, 0x00, 0x5f, 0x31, effect, param, value & 0x7f, value >> 7, 0xf7])
     },
+    /** A change on the pedal that it does not announce (e.g. effect 4 on/off): only the buffer changes. */
+    silentEdit(newBytes: number[]) {
+      buffer = newBytes
+    },
     /** Power cycle: the unsaved buffer is lost. */
     powerCycle() {
       buffer = memory[program].slice()

@@ -18,6 +18,8 @@ export interface Conflict {
 const SETTLE_MS = 500
 /** Live sends are coalesced to at most one batch per this interval (g200kg uses 80 ms). */
 const LIVE_THROTTLE_MS = 80
+/** How often the pedal's edit buffer is re-read to catch changes it does not announce. */
+const BUFFER_POLL_MS = 1000
 
 /**
  * Keeps the editor and the pedal in step (spec §3).
@@ -192,6 +194,45 @@ export function usePedalSync(pedal: PedalSession | undefined, state: BankState, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [live, pedal, enqueue])
 
+  /** What the pedal's buffer holds for its active patch was changed on the pedal: take it. */
+  const applyPedalBuffer = (index: number, raw: number[]) => {
+    const patch = patchFromDevice(raw)
+    lastSeenRef.current = { slot: index, patch }
+    const slot = stateRef.current.slots[index]
+    if (liveRef.current) {
+      if (index !== stateRef.current.current) return
+      bufferRef.current = { slot: index, patch }
+      if (!patchesEqual(patch, slot.device)) notePending(index)
+      dispatch({ type: 'setWorking', index, patch })
+    } else if (isDirty(slot)) setConflict({ index, patch, raw })
+    else dispatch({ type: 'loadSlot', index, patch, raw, mode: 'replace' })
+  }
+  const lastSeenRef = useRef<{ slot: number; patch: Patch } | null>(null)
+
+  // The pedal does not report every change made on it (found: switching effect 4
+  // on/off sends nothing), so its buffer is also re-read periodically (0x29, read only).
+  useEffect(() => {
+    if (!pedal) return
+    const id = setInterval(() => {
+      if (timerRef.current) return // app edits not sent yet: compare later
+      void enqueue(null, async () => {
+        const index = pedal.activeProgram
+        if (index === null) return
+        if (liveRef.current && index !== stateRef.current.current) return
+        const raw = await pedal.readSlot(index)
+        const patch = patchFromDevice(raw)
+        const expected = liveRef.current && bufferRef.current?.slot === index ? bufferRef.current.patch : stateRef.current.slots[index].device
+        const seen = lastSeenRef.current
+        const alreadyHandled = seen?.slot === index && patchesEqual(seen.patch, patch)
+        lastSeenRef.current = { slot: index, patch }
+        if (patchesEqual(patch, expected) || alreadyHandled) return
+        applyPedalBuffer(index, raw)
+      })
+    }, BUFFER_POLL_MS)
+    return () => clearInterval(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pedal, enqueue])
+
   // Events from the pedal.
   useEffect(() => {
     if (!pedal) return
@@ -200,16 +241,7 @@ export function usePedalSync(pedal: PedalSession | undefined, state: BankState, 
       enqueue(null, async () => {
         const index = pedal.activeProgram
         if (index === null) return
-        const raw = await pedal.readSlot(index)
-        const patch = patchFromDevice(raw)
-        const slot = stateRef.current.slots[index]
-        if (liveRef.current) {
-          if (index !== stateRef.current.current) return
-          bufferRef.current = { slot: index, patch }
-          if (!patchesEqual(patch, slot.device)) notePending(index)
-          dispatch({ type: 'setWorking', index, patch })
-        } else if (isDirty(slot)) setConflict({ index, patch, raw })
-        else dispatch({ type: 'loadSlot', index, patch, raw, mode: 'replace' })
+        applyPedalBuffer(index, await pedal.readSlot(index))
       })
     const off = pedal.onEvent((e) => {
       if (e.type === 'program') {
@@ -227,6 +259,8 @@ export function usePedalSync(pedal: PedalSession | undefined, state: BankState, 
       clearTimeout(timer)
       off()
     }
+    // applyPedalBuffer reads refs only; re-subscribing on every render is not wanted.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pedal, dispatch, enqueue])
 
   // Closing the page with live changes: best-effort restore of the buffer.

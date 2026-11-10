@@ -36,7 +36,12 @@ async function connected(opts: { live?: boolean; pedal?: ReturnType<typeof fakeP
   return { pedal, view }
 }
 
-const firstKnob = () => screen.getAllByRole('slider')[0]
+/** First knob of effect 1 (BassDrive); the app opens the patch on the pedal's selected effect, so select it first. */
+const firstKnob = () => {
+  const b = screen.getAllByRole('button', { name: 'BassDrive' }).find((x) => x.classList.contains('block-name'))!
+  if (!screen.getByRole('heading', { level: 2 }).textContent?.startsWith('1.')) fireEvent.click(b)
+  return screen.getAllByRole('slider')[0]
+}
 const settle = () => act(() => new Promise((r) => setTimeout(r, 150)))
 
 describe('live listening (simulated pedal)', () => {
@@ -135,6 +140,26 @@ describe('live listening (simulated pedal)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Restaurar' }))
     await waitFor(() => expect(pedal.memory[active]).toEqual(original[active]))
     await waitFor(() => expect(readPending()).toBeNull())
+  })
+})
+
+describe('pedal selection (simulated)', () => {
+  it('opens the patch on the effect the pedal has selected', async () => {
+    await connected()
+    const focus = decodePatch60B(original[active]).focus
+    expect(screen.getByRole('heading', { level: 2 }).textContent).toMatch(new RegExp(`^${focus + 1}\\.`))
+  })
+
+  it('a change made on the pedal that it does not announce is picked up by re-reading its buffer', async () => {
+    const { pedal } = await connected()
+    const d = decodePatch60B(pedal.buffer)
+    const { encodePatch60B } = await import('../protocol/patch60b')
+    // Effect 4 switched on/off on the pedal: no 0x31 is emitted.
+    const edited = Array.from(encodePatch60B(pedal.buffer, { name: d.name, effects: d.effects.slice(0, d.maxFx).map((e, i) => (i === 3 ? { ...e, on: !e.on } : e)) }))
+    pedal.silentEdit(edited)
+    pedal.sent.length = 0
+    await waitFor(() => expect(screen.getByText('sin guardar')).toBeInTheDocument(), { timeout: 3000 })
+    expect(screen.getByRole('button', { name: /RackComp (activo|en bypass)/ })).toHaveAttribute('aria-pressed', String(!d.effects[3].on))
   })
 })
 
