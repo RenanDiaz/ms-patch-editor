@@ -1,0 +1,169 @@
+# Protocolo USB/MIDI del Zoom MS-60B (S0)
+
+- **Estado:** S0, solo lectura de código. Nada de este documento se ha probado contra el pedal.
+- **Fuente:** [g200kg/zoom-ms-utility](https://github.com/g200kg/zoom-ms-utility), commit `5bf930c8e1622b0c70c0c3d761424f84955a227a` (2022-12-20), licencia MIT. Archivos: `midimessage.md`, `index.html`, `js/apatch.js`, `js/effectslist.js`.
+- **Fuente secundaria:** `docs/MS-60B_operationManual_English.pdf` (Zoom). El manual no documenta MIDI; solo se usa para el comportamiento del pedal (auto guardado, DSP).
+- **Advertencia del autor original** (`index.html`, comentario de cabecera, línea 18): los comandos "se infirieron por experimentación y no están garantizados". `midimessage.md` lo describe como "documento no oficial basado en experimentos personales y no estrictos". Gran parte de sus notas se hicieron con el MS-50G.
+
+Todas las líneas citadas son del commit indicado. Los bytes de ejemplo usan `devid = 0x5F` (MS-60B); la fuente los escribe con `0x58` (MS-50G) y dice que el 4.º byte se cambia por `0x5F` para el 60B (`midimessage.md`, "Identity Request"). En el código, el `devid` se toma de la respuesta de Identity Request (`index.html:191-232`, `MidiIf.recv`).
+
+## 1. Resumen
+
+| # | Mensaje | Bytes (60B) | Sentido | Persiste | Clase |
+|---|---|---|---|---|---|
+| 1 | Identity Request | `F0 7E 00 06 01 F7` | app → pedal | no | Lectura |
+| 2 | Identity Reply | `F0 7E 00 06 02 52 5F 00 00 00 v v v v F7` | pedal → app | – | – |
+| 3 | Request Current Program | `F0 52 00 5F 33 F7` | app → pedal | no | Lectura |
+| 4 | Current Program Reply | `B0 00 00` `B0 20 00` `C0 pp` | pedal → app | – | – |
+| 5 | Program Change | `C0 pp` | ambos | no | Lectura con aviso |
+| 6 | Parameter Edit Enable | `F0 52 00 5F 50 F7` | app → pedal | no | Lectura con aviso |
+| 7 | Parameter Edit Disable | `F0 52 00 5F 51 F7` | app → pedal | no | Lectura con aviso |
+| 8 | Request Patch | `F0 52 00 5F 29 F7` | app → pedal | no | Lectura |
+| 9 | Patch Data / Send Patch | `F0 52 00 5F 28 …(105 bytes)… F7` | ambos | ver §4 | Escritura (app → pedal) |
+| 10 | Parameter Edit | `F0 52 00 5F 31 nn pp vL vM F7` | ambos | ver §4 | Escritura (app → pedal) |
+| 11 | Store Patch | `F0 52 00 5F 32 01 00 00 pp 00 00 00 00 00 F7` | app → pedal | **sí** | Escritura persistente |
+| 12 | Store Ack | prefijo `F0 52 00 5F 00 …` | pedal → app | – | – |
+| 13 | Tuner On/Off | `B0 4A mm` | app → pedal | no | Fuera de alcance v1 |
+| 14 | Desconocido | `F0 52 00 5F 60 F7` | – | ? | **Prohibido** |
+
+"Clase" es la acordada con el usuario y está en `CLAUDE.md`.
+
+## 2. Mensajes
+
+### 2.1 Leer el estado del pedal
+
+**Identity Request** — `F0 7E 00 06 01 F7`
+- Mensaje universal MIDI. Respuesta del 60B según `midimessage.md`: `F0 7E 00 06 02 52 5F 00 00 00 31 2E 30 30 F7` → product ID `0x5F`, versión ASCII en bytes 10-13 (`"1.00"`).
+- Origen: `index.html:327` (`MidiIf.StartScan`, primer mensaje), parser en `index.html:191-232` (`MidiIf.recv`).
+- Uso: la versión de firmware cambia la tabla del parámetro de gabinete de B-AMP: `bampcab[(v>=2)?1:0]` aplicado al parámetro 8 de cada AMP (`index.html:210-224`; tablas `bampcab` en `index.html:85-94`). La app **debe** leerla al conectar.
+
+**Request Current Program** — `F0 52 00 5F 33 F7`
+- Respuesta: tres mensajes cortos `B0 00 00`, `B0 20 00`, `C0 pp` (bank select MSB/LSB siempre 0, `pp` = 0..49). En Web MIDI llegan como mensajes separados; g200kg espera solo el que empieza por `c0`.
+- Origen: `index.html:332` (`StartScan`, guarda el patch original en `this.norg`), `index.html:448` (`MidiIf.timer`, **sondeo cada 80 ms** cuando la cola está vacía; intervalo en `index.html:488`).
+- Cuando llega un `C0 pp` distinto del actual fuera del escaneo, g200kg cambia de patch en la UI (`index.html:171-177`, `recv`). Así detecta que el usuario cambió de patch **en el pedal**.
+
+**Program Change** — `C0 pp`
+- Selecciona el patch `pp` (0-49) en el pedal. No persiste nada, pero cambia el patch que suena.
+- Origen: `index.html:1501` (`SelectPatch`), `index.html:293`/`335` (escaneo), `index.html:255` (restaurar patch original al terminar el escaneo).
+
+### 2.2 Leer patches y parámetros
+
+No hay un mensaje "leer ranura N". `Request Patch` siempre devuelve el **patch actual**. Para leer el banco, g200kg hace por cada ranura `C0 pp` + `Request Patch` y espera la respuesta `0x28`.
+
+**Secuencia de escaneo** (`index.html:321-339`, `MidiIf.StartScan`; continúa en `recv` `index.html:237-298`):
+
+```
+F0 7E 00 06 01 F7          Identity Request              (+200 ms)
+F0 52 00 5F 50 F7          Parameter Edit Enable         (+100 ms)
+F0 52 00 5F 33 F7          Request Current Program  → C0 pp_original
+F0 52 00 5F 50 F7          Parameter Edit Enable (de nuevo)
+C0 00                      Program Change → patch 0
+F0 52 00 5F 29 F7          Request Patch  → F0 52 00 5F 28 … F7 (105 bytes)
+C0 01 / F0 52 00 5F 29 F7  … hasta pp = 49
+C0 pp_original             restaurar el patch activo
+```
+
+Los mensajes salen de una cola a 1 mensaje cada 80 ms (`MidiIf.timer`, `index.html:405-450`). No hay timeout ni reintento si un patch no responde.
+
+**Parameter Edit Enable / Disable** — `F0 52 00 5F 50 F7` / `F0 52 00 5F 51 F7`
+- "Necesario antes de editar parámetros" (`index.html:39-42`, comentario). g200kg lo envía al iniciar el escaneo (`index.html:329`, `334`) y **nunca envía Disable** (no aparece fuera del comentario). Efecto en el pedal no documentado.
+
+**Request Patch** — `F0 52 00 5F 29 F7`
+- Respuesta: patch de 105 bytes con comando `0x28` (formato en §3).
+- Origen: `index.html:294`, `336` (escaneo), `index.html:361-364` (`MidiIf.RequestPatch`).
+
+### 2.3 Escribir un patch
+
+**Send Patch** — `F0 52 00 5F 28 <bytes 5..103> F7` (105 bytes)
+- "Escribe el patch al programa actual" (`midimessage.md`, "Send Patch"). Es el mismo formato que la respuesta a Request Patch.
+- Origen: `MidiIf.SendCurrentPatch` (`index.html:369-371`) → `apatch.MakeBin` (`js/apatch.js:238-295`).
+- Ejemplo real de la fuente, plantilla vacía del 60B (`apatch.prototype.empty105`, `js/apatch.js:34-41`), nombre "Empty":
+  ```
+  F0 52 00 5F 28 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00
+  00 00 00 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00
+  00 00 00 00 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00
+  00 00 00 00 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00
+  00 00 00 00 00 10 00 00 40 04 0F 45 6D 00 70 74 79 20 20 20
+  20 00 20 00 F7
+  ```
+- **g200kg envía `0x28` con mucha frecuencia**: al hacer clic en un parámetro (solo para mover el foco, `index.html:628-639`), al hacer bypass (`ToggleEffect`, `index.html:1345-1348`), al cambiar, insertar, borrar o mover efectos (`index.html:789`, `963`, `989`, `999`, `1010`), al renombrar (`index.html:1227`) y al editar parámetros de efectos 4+ (`index.html:656`).
+
+**Store Patch** — `F0 52 00 5F 32 01 00 00 pp 00 00 00 00 00 F7`
+- "Fuerza el guardado en memoria. pp = patch (0-49). El pedal muestra [Storing...]" (`midimessage.md`).
+- Origen: `StorePatch` (`index.html:1520-1529`). Con callback espera una respuesta que empiece por `F0 52 00 5F 00` (`midiif.sysexhead+"00"`); su contenido completo no está documentado.
+- Secuencia de guardado de banco completo (`StoreAll`, `index.html:1659-1680`), por ranura: `C0 pp` → Send Patch `0x28` → Store `0x32 … pp …` → esperar ack.
+- **No está claro** si Store guarda el buffer de edición en la ranura `pp` aunque `pp` no sea el patch actual. g200kg siempre hace `C0 pp` antes, así que no lo prueba.
+
+**Secuencia mínima para "Guardar" una ranura**, derivada de `StoreAll`:
+```
+C0 pp                                   (seleccionar ranura; cambia el patch activo)
+F0 52 00 5F 28 … F7                     (enviar patch de trabajo al buffer)
+F0 52 00 5F 32 01 00 00 pp 00 00 00 00 00 F7
+← F0 52 00 5F 00 …                      (ack)
+```
+
+### 2.4 Cambiar un parámetro en vivo
+
+**Parameter Edit** — `F0 52 00 5F 31 nn pp vL vM F7`
+- `nn` = efecto 0..3 (60B), `pp` = 0 on/off, 1 = tipo (no usado), 2..10 = parámetros 1..9; valor de 14 bits `v = vL + (vM << 7)`.
+- Ejemplo: perilla 1 del efecto 1 a 50 → `F0 52 00 5F 31 00 02 32 00 F7`. Bypass del efecto 2 → `F0 52 00 5F 31 01 00 00 00 F7` (forma `EffectEnable`, `index.html:31-32`).
+- Origen: `MidiIf.SendParamChange` (`index.html:365-368`), llamado desde el `oninput` de la perilla (`index.html:640-661`).
+- **Restricción observada por g200kg:** "parece efectivo solo para los efectos 1-3" (`index.html:32`, `midimessage.md`). El código solo usa `0x31` si el efecto es 1-3 **y** tiene el foco; si no, reenvía el patch entero con `0x28` (`index.html:654-659`). No se sabe si en el 60B aplica a los 4.
+- La cola fusiona mensajes `0x31` consecutivos del mismo efecto/parámetro y `0x28` consecutivos (`MidiIf.Send`, `index.html:347-360`).
+
+### 2.5 Mensajes que el pedal envía solo
+
+- **`F0 52 00 5F 31 nn pp vL vM F7`** cuando se gira una perilla o se activa un efecto **en el pedal** (requiere Edit Enable, según el flujo de g200kg). Parser en `index.html:179-190` (`recv`). Nota: con `pp == 0` g200kg siempre pone el efecto en OFF, sin mirar el valor; parece un error y no se porta tal cual.
+- **`C0 pp`** cuando se cambia de patch en el pedal (o como respuesta a `0x33`).
+
+## 3. Formato del patch (105 bytes, MS-60B)
+
+Fuente principal: tablas `bits`, `namidx`, `cabbyte`, `v2byte`, `maxfxidx` y funciones `GetBits`/`SetBits`/`ReadBin`/`MakeBin` de `js/apatch.js:42-295`. `midimessage.md` tiene una tabla de bits equivalente (columna "MS60B" para los bytes 85-104).
+
+- Bytes 0-4: `F0 52 00 5F 28`. Byte 104: `F7`.
+- 4 efectos (`flen = 4`), cada uno con 11 valores `fx[f][0..10]`: 0 = on/off, 1 = ID de efecto (32 bits repartidos), 2..10 = parámetros 1..9.
+- Cada valor está **disperso** en varios bytes. Cada tramo es `[byte, máscara, desplazamiento]`: `valor |= (dat[byte] & máscara) << desplazamiento` (desplazamiento negativo = a la derecha). Ejemplo efecto 0, parámetro 1 (`fx[0][2]`): `[[9,0x60,-5],[5,0x8,-1],[10,0x7f,3],[5,0x4,8],[11,0x1,11]]` (`js/apatch.js:46`). Los tramos con byte ≥ 105 se ignoran en el 60B.
+- Tramos `"NZ"` (`js/apatch.js:53`, `66`, `79`, `92`): bit que vale 1 si el parámetro 8 ≠ 0. En lectura se ignoran.
+- Nombre: 10 caracteres ASCII en los bytes `91 92 94 95 96 97 98 99 100 102` (`namidx[0]`, `js/apatch.js:123`); los bytes 93, 101 y 103 son `0x00` o bits de otros campos. `ReadBin` lee 13 bytes desde el 91 saltando ceros y recorta espacios.
+- Número de efectos usados: `(dat[89] & 0x1C) >> 2` (`maxfxidx`, `GetMaxFxBit`, `js/apatch.js:132-176`).
+- Efecto con foco: `3 - (((dat[88]&0x40)>>6) + ((dat[85]&0x10)>>3))` (`GetCurFxBit`, `js/apatch.js:147-152`).
+- **DSP lleno por efecto:** `dspstate = dat[88] & 0x3F`, bit `n` = efecto `n` ("df" en `midimessage.md`) (`ReadBin`, `js/apatch.js:236`; `GetDspState`, `js/apatch.js:144-146`). Lo calcula el pedal: solo es fiable en un patch que el pedal haya recibido y devuelto.
+- Bytes especiales de AMP: `cabbyte = 23, 43, 64, 84` y `v2byte = 8, 28, 49, 70` (`js/apatch.js:126-131`). `MakeBin` los recalcula a partir del tipo de efecto y del parámetro 8 (`js/apatch.js:261-284`).
+
+**`MakeBin` no conserva bytes desconocidos.** Construye el patch desde la plantilla `empty105` y solo escribe los campos que conoce. Todo bit no modelado (por ejemplo tempo, que `midimessage.md` ubica en bytes del formato de 146 bytes) vuelve al valor de la plantilla. Decisión propuesta: nuestro port parte de los **105 bytes leídos** y modifica solo los bits conocidos, con un test de ida y vuelta byte a byte.
+
+**Parámetros (nombre, rango, defecto, DSP estimado):** `js/effectslist.js`. Cada efecto: `{name, group, ver, dsp, dspmax, dspmin, param:[{name, def, max, disp?}]}`. El rango es `0..max`; `disp` es un array de etiquetas o un desplazamiento (`-10` = mostrar −10..+10). El efecto existe en el 60B si `(ver >> 4) & 0xF` es distinto de 0 y menor o igual a la versión de firmware (`MidiIf.instSet`, `index.html:137-157`). Uso del DSP: `100 / dsp` % por efecto (`dumpeff`, `index.html:114`; barra en `DispPatch`, `index.html:1387`). Es una estimación de g200kg, no un dato de Zoom.
+
+## 4. ¿Existe un mensaje para cambiar un parámetro en vivo sin persistirlo? (spec §3)
+
+**Respuesta según el código: sí.**
+
+- `0x31` (Parameter Edit) y `0x28` (Send Patch) modifican el **buffer de edición del patch actual**. La persistencia en la memoria del pedal solo la hace `0x32` (Store). g200kg tiene su propio auto guardado: espera unos 3 s de inactividad (`dirty > 40` ticks de 80 ms) y envía Store (`index.html:440-446`). Si ese auto guardado está apagado, g200kg solo persiste con el botón de guardar (`SavePatchToDevice`, `index.html:1597-1599`). Este diseño solo tiene sentido si `0x31`/`0x28` no persisten por sí solos.
+- El pedal **emite** `0x31` cuando se toca una perilla en el pedal, y `C0 pp` al cambiar de patch (§2.5). Con eso la app puede detectar cambios hechos en el pedal antes de guardar, como pide la regla de conflictos de la §3 de la spec.
+
+**Riesgo grave que hay que resolver antes de cualquier escritura:** el manual dice que el pedal tiene una función **AUTO SAVE** que viene **activada de fábrica**: "As soon as a parameter is adjusted this change is automatically saved" (manual, p. 10; ajuste en SETTINGS → AUTO SAVE, p. 20). No se sabe si AUTO SAVE también guarda los cambios que llegan por `0x31`/`0x28`. Si los guarda, cualquier edición en vivo desde la app sería un auto guardado y violaría la regla "nada de auto guardado". Propuesta: (1) pedir al usuario que apague AUTO SAVE en el pedal antes de S3; (2) en S3, con aprobación, verificar que `0x31` sin `0x32` no persiste (editar, cambiar de patch, volver, leer); (3) hasta entonces la app **no** usa `0x31` ni `0x28` para escuchar en vivo.
+
+## 5. Lo que no se porta
+
+- Auto guardado por temporizador (`index.html:440-446` y cada `if(autosave) StorePatch(...)`).
+- `InstallChecker` (`index.html:1530-1591`): escribe efectos de prueba en el buffer del patch 49 para detectar efectos instalados.
+- Envío de `0x28` solo para mover el foco del efecto (`index.html:628-639`).
+- Mensaje `0x60` (desconocido) y Tuner `B0 4A`.
+- Ningún mensaje de actualización de firmware: g200kg no tiene ninguno; el manual indica que el firmware se actualiza por USB con el actualizador de Zoom, que queda fuera del proyecto.
+
+## 6. Pendientes (no verificados)
+
+1. Todo el documento contra el pedal real (S1 para lectura, S3 para escritura).
+2. Si AUTO SAVE del pedal persiste cambios hechos por MIDI (§4).
+3. Si `0x31` funciona en el efecto 4 del 60B.
+4. Qué hace Edit Enable `0x50` exactamente y si hay que enviar Disable `0x51` al desconectar.
+5. Si Store `0x32` con `pp` distinto del patch actual guarda el buffer en esa ranura.
+6. El contenido completo del ack de Store (`F0 52 00 5F 00 …`).
+7. Tiempos mínimos entre mensajes; g200kg usa 80 ms por mensaje sin timeouts.
+8. Si la respuesta de Identity Reply del 60B coincide con la de `midimessage.md`, y qué tablas cambian según la versión de firmware además del gabinete.
+9. Que los rangos de `effectslist.js` coinciden con el pedal (procedimiento manual: llevar la perilla al extremo en el pedal y leer).
+10. Nombres de efectos: cruzar `effectslist.js` con el manual (pp. 24-28, "Effect Types") en S2.
+
+## 7. Atribución
+
+El protocolo y las tablas provienen de zoom-ms-utility de g200kg, MIT License, "Copyright (c) 2017" (el archivo `LICENSE` no incluye un nombre de titular). El código que se porte llevará el aviso MIT en cada archivo y se listará en `THIRD_PARTY_NOTICES.md` (se crea en S1, cuando se porte el primer archivo).
