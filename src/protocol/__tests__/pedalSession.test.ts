@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from 'vitest'
 import cap from '../__fixtures__/ms60b-bank-2026-11-10-fw2.10.json'
 import { fakePedal } from '../../test/fakePedal'
 import { isAllowedReadMessage, parseParamEdit } from '../messages'
-import { PedalSession, type PedalEvent } from '../pedalSession'
+import { PedalSession, WrongPatchError, type PedalEvent } from '../pedalSession'
+import { sendPatch } from '../writeMessages'
 
 const fast = { gapMs: 0, timeoutMs: 50, sleep: () => Promise.resolve(), now: () => 0 }
 
@@ -65,5 +66,27 @@ describe('PedalSession (simulated pedal)', () => {
     await Promise.all([s.readSlot(1).then(() => spy(1)), s.readSlot(2).then(() => spy(2))])
     expect(spy.mock.calls).toEqual([[1], [2]])
     expect(pedal.sent.filter((m) => m[0] === 0xc0).map((m) => m[1])).toEqual([1, cap.originalProgram, 2, cap.originalProgram])
+  })
+
+  it('a live write is refused, with nothing sent, if the pedal is not on the expected patch', async () => {
+    const pedal = fakePedal()
+    const s = new PedalSession(pedal.transport, fast)
+    await s.scan()
+    pedal.selectOnPedal(5) // not yet seen by polling
+    const events: PedalEvent[] = []
+    s.onEvent((e) => events.push(e))
+    await expect(s.sendLive(cap.originalProgram, [sendPatch(pedal.memory[0])])).rejects.toBeInstanceOf(WrongPatchError)
+    expect(pedal.sent.filter((m) => !isAllowedReadMessage(m))).toEqual([])
+    await Promise.resolve()
+    expect(events).toEqual([{ type: 'program', slot: 5 }])
+    expect(s.activeProgram).toBe(5)
+  })
+
+  it('emergencyRestore does nothing if the pedal is known to be elsewhere', async () => {
+    const pedal = fakePedal()
+    const s = new PedalSession(pedal.transport, fast)
+    await s.scan()
+    s.emergencyRestore(3, pedal.memory[3])
+    expect(pedal.sent.filter((m) => !isAllowedReadMessage(m))).toEqual([])
   })
 })

@@ -4,7 +4,7 @@ import { patchFromDevice } from '../model/fromDevice'
 import { liveMessages, toEncodable } from '../model/liveDiff'
 import { patchesEqual, type Patch } from '../model/patch'
 import { encodePatch60B } from '../protocol/patch60b'
-import type { PedalSession } from '../protocol/pedalSession'
+import { WrongPatchError, type PedalSession } from '../protocol/pedalSession'
 import { diffOffsets } from '../protocol/s3'
 import { clearPending, readPending, writePending, type PendingRestore } from './pendingRestore'
 
@@ -65,7 +65,7 @@ export function usePedalSync(pedal: PedalSession | undefined, state: BankState, 
       try {
         await fn()
       } catch (e) {
-        setError((e as Error).message)
+        if (!(e instanceof WrongPatchError)) setError((e as Error).message)
       } finally {
         if (what) setBusy(null)
       }
@@ -93,7 +93,7 @@ export function usePedalSync(pedal: PedalSession | undefined, state: BankState, 
     const msgs = liveMessages(b.patch, s.working, s.raw)
     if (!msgs.length) return
     notePending(slot)
-    await p.sendLive(msgs)
+    await p.sendLive(slot, msgs)
     bufferRef.current = { slot, patch: s.working }
     if (patchesEqual(s.working, s.device)) clearPending(slot)
   }
@@ -102,7 +102,7 @@ export function usePedalSync(pedal: PedalSession | undefined, state: BankState, 
   const restoreBuffer = async (p: PedalSession, slot: number) => {
     const s = stateRef.current.slots[slot]
     if (!s.raw || !bufferDirty(slot)) return
-    await p.sendLive([Uint8Array.from(s.raw)], `Restaurar el patch ${slot + 1}`)
+    await p.sendLive(slot, [Uint8Array.from(s.raw)], `Restaurar el patch ${slot + 1}`)
     bufferRef.current = { slot, patch: s.device }
   }
 
@@ -236,7 +236,7 @@ export function usePedalSync(pedal: PedalSession | undefined, state: BankState, 
       const b = bufferRef.current
       if (!b || !bufferDirty(b.slot)) return
       const raw = stateRef.current.slots[b.slot].raw
-      if (raw) pedal.emergencyRestore(raw)
+      if (raw) pedal.emergencyRestore(b.slot, raw)
     }
     window.addEventListener('pagehide', h)
     return () => window.removeEventListener('pagehide', h)

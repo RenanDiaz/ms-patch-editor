@@ -14,6 +14,17 @@ import { isPatchData60B } from './patch60b'
 import { MidiSession, writeApproval, writeSlot, type SessionOptions, type WriteResult } from './s3'
 import { scanBank, type BankCapture, type LogEntry, type ScanOptions } from './scanBank'
 
+/** A live write was refused because the pedal is not on the expected patch. Nothing was sent. */
+export class WrongPatchError extends Error {
+  readonly expected: number
+  readonly actual: number
+  constructor(expected: number, actual: number) {
+    super(`El pedal está en el patch ${actual + 1}, no en el ${expected + 1}: no se envió nada.`)
+    this.expected = expected
+    this.actual = actual
+  }
+}
+
 export type PedalEvent = { type: 'program'; slot: number } | ({ type: 'param' } & ParamEditEvent)
 
 const LOG_LIMIT = 2000
@@ -128,9 +139,23 @@ export class PedalSession {
    * Live listening: sends 0x28 / 0x31 messages to the active patch's edit
    * buffer. The pedal keeps them in the slot only when leaving the patch.
    */
-  sendLive(messages: readonly Uint8Array[], label = 'Escucha en vivo'): Promise<void> {
+  sendLive(slot: number, messages: readonly Uint8Array[], label = 'Escucha en vivo'): Promise<void> {
     if (messages.length === 0) return Promise.resolve()
     return this.exclusive(async () => {
+      // The edit buffer belongs to whatever patch the pedal is on: confirm it is `slot` first.
+      const check = new MidiSession(this.io, this.log, this.t0, this.opts)
+      let now: number
+      try {
+        now = parseProgramChange(await check.request(requestCurrentProgram(), (r) => parseProgramChange(r) !== null, 'patch activo'))!
+      } finally {
+        check.close()
+      }
+      if (now !== slot) {
+        const was = this.activeProgram
+        this.activeProgram = now
+        if (was !== now) queueMicrotask(() => this.emit({ type: 'program', slot: now }))
+        throw new WrongPatchError(slot, now)
+      }
       const io = withApprovedWrites(this.raw, { label, writes: messages })
       const s = new MidiSession(io, this.log, this.t0, { ...this.opts, gapMs: Math.min(this.opts.gapMs ?? 10, 10) })
       try {
@@ -154,7 +179,8 @@ export class PedalSession {
    * Best effort, synchronous: puts the original bytes back in the edit buffer
    * when the page is closing (no awaiting possible). Not verified.
    */
-  emergencyRestore(bytes: ArrayLike<number>) {
+  emergencyRestore(slot: number, bytes: ArrayLike<number>) {
+    if (this.activeProgram !== slot) return
     const m = Uint8Array.from(bytes)
     withApprovedWrites(this.raw, { label: 'Restaurar al cerrar', writes: [m] }).send(m)
   }
