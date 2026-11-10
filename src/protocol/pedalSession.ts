@@ -1,13 +1,17 @@
 /*
- * Read-only connection to the pedal for the editor (v1): bank scan, re-reading
- * one slot, and events the pedal sends on its own (patch change, knob turned).
- * Every message goes through readOnly(): this file cannot write.
+ * Connection to the pedal for the editor: bank scan, re-reading a slot,
+ * events the pedal sends on its own (patch change, knob turned), and the
+ * writes the user triggers in the app (live listening, Save, restore).
+ *
+ * Reads go through readOnly(). Every write goes through withApprovedWrites()
+ * with the exact bytes of that one operation (CLAUDE.md rules 1 and 3).
  */
 import type { MidiMessage, MidiTransport } from '../transport/MidiTransport'
+import { withApprovedWrites } from '../transport/approvedWrites'
 import { readOnly } from '../transport/readOnlyGuard'
 import { parseParamEdit, parseProgramChange, programChange, requestPatch, type ParamEditEvent } from './messages'
 import { isPatchData60B } from './patch60b'
-import { MidiSession, type SessionOptions } from './s3'
+import { MidiSession, writeApproval, writeSlot, type SessionOptions, type WriteResult } from './s3'
 import { scanBank, type BankCapture, type LogEntry, type ScanOptions } from './scanBank'
 
 export type PedalEvent = { type: 'program'; slot: number } | ({ type: 'param' } & ParamEditEvent)
@@ -16,6 +20,7 @@ const LOG_LIMIT = 2000
 
 export class PedalSession {
   private readonly io: MidiTransport
+  private readonly raw: MidiTransport
   private readonly listeners = new Set<(e: PedalEvent) => void>()
   private readonly unsubscribe: () => void
   private queue: Promise<unknown> = Promise.resolve()
@@ -29,6 +34,7 @@ export class PedalSession {
 
   constructor(transport: MidiTransport, opts: SessionOptions & Pick<ScanOptions, 'gapMs' | 'timeoutMs' | 'sleep'> = {}) {
     this.opts = opts
+    this.raw = transport
     this.io = readOnly(transport)
     this.t0 = (opts.now ?? (() => performance.now()))()
     this.unsubscribe = this.io.onMessage((m) => this.onIdleMessage(m))
@@ -95,6 +101,55 @@ export class PedalSession {
         s.close()
       }
     })
+  }
+
+  /** Program Change to a slot (read with notice). Leaving a patch makes the pedal keep its edit buffer. */
+  select(slot: number): Promise<void> {
+    return this.exclusive(async () => {
+      if (this.activeProgram === slot) return
+      const s = new MidiSession(this.io, this.log, this.t0, this.opts)
+      try {
+        await s.send(programChange(slot))
+        this.activeProgram = slot
+      } finally {
+        s.close()
+      }
+    })
+  }
+
+  /**
+   * Live listening: sends 0x28 / 0x31 messages to the active patch's edit
+   * buffer. The pedal keeps them in the slot only when leaving the patch.
+   */
+  sendLive(messages: readonly Uint8Array[], label = 'Escucha en vivo'): Promise<void> {
+    if (messages.length === 0) return Promise.resolve()
+    return this.exclusive(async () => {
+      const io = withApprovedWrites(this.raw, { label, writes: messages })
+      const s = new MidiSession(io, this.log, this.t0, { ...this.opts, gapMs: Math.min(this.opts.gapMs ?? 10, 10) })
+      try {
+        for (const m of messages) await s.send(m)
+      } finally {
+        s.close()
+      }
+    })
+  }
+
+  /** Save: C0 slot, 0x28, 0x32, ack, read back from memory (writeSlot, S3). The pedal ends on `slot`. */
+  save(slot: number, bytes: ArrayLike<number>): Promise<WriteResult> {
+    return this.exclusive(async () => {
+      const r = await writeSlot({ transport: this.raw, log: this.log, t0: this.t0, opts: this.opts }, slot, bytes, writeApproval(slot, bytes, `Guardar en la ranura ${slot + 1}`))
+      this.activeProgram = slot
+      return r
+    })
+  }
+
+  /**
+   * Best effort, synchronous: puts the original bytes back in the edit buffer
+   * when the page is closing (no awaiting possible). Not verified.
+   */
+  emergencyRestore(bytes: ArrayLike<number>) {
+    const m = Uint8Array.from(bytes)
+    withApprovedWrites(this.raw, { label: 'Restaurar al cerrar', writes: [m] }).send(m)
   }
 
   close() {

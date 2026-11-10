@@ -33,6 +33,10 @@ export type BankAction =
    * keeps the user's changes (conflict resolved as "keep mine").
    */
   | { type: 'loadSlot'; index: number; patch: Patch; raw: number[]; mode: 'replace' | 'deviceOnly' }
+  /** Live listening: the pedal's edit buffer changed (knob on the pedal); it becomes the working copy. */
+  | { type: 'setWorking'; index: number; patch: Patch }
+  /** The user changed patch on the pedal: follow it, keeping any unsaved working copy. */
+  | { type: 'followPedal'; index: number }
 
 export function initBank(firmware: number, patches: Patch[], raws?: number[][]): BankState {
   return {
@@ -104,6 +108,10 @@ export function bankReducer(state: BankState, action: BankAction): BankState {
       }
     case 'dismissError':
       return { ...state, saveError: null }
+    case 'setWorking':
+      return replaceSlot(state, action.index, { ...state.slots[action.index], working: action.patch })
+    case 'followPedal':
+      return action.index === state.current ? state : switchTo(state, action.index)
     case 'loadSlot': {
       const old = state.slots[action.index]
       const working = action.mode === 'replace' ? action.patch : old.working

@@ -25,15 +25,16 @@ interface Props {
   initial: () => BankState
   /** Shown in the header, e.g. "DATOS FALSOS". */
   sourceLabel: string
-  /** Real pedal (read-only in this version). Absent = fake data. */
+  /** Real pedal. Absent = fake data. */
   pedal?: PedalSession
-  /** False while writing to the pedal is not available: Save is disabled with this reason. */
-  writeBlockedReason?: string
+  /** Live listening starts on (real pedal only). */
+  liveDefault?: boolean
 }
 
-export function EditorPage({ initial, sourceLabel, pedal, writeBlockedReason }: Props) {
+export function EditorPage({ initial, sourceLabel, pedal, liveDefault = true }: Props) {
   const [state, dispatch] = useReducer(bankReducer, undefined, initial)
-  const sync = usePedalSync(pedal, state, dispatch)
+  const [live, setLive] = useState(!!pedal && liveDefault)
+  const sync = usePedalSync(pedal, state, dispatch, live)
   const [picker, setPicker] = useState<Picker>(null)
   const dragFrom = useRef<number | null>(null)
   const [dropAt, setDropAt] = useState<number | null>(null)
@@ -42,7 +43,7 @@ export function EditorPage({ initial, sourceLabel, pedal, writeBlockedReason }: 
   const patch = slot.working
   const dirty = isDirty(slot)
   const dspCheck = canSave(patch)
-  const check = dspCheck.ok && writeBlockedReason ? { ok: false, reason: writeBlockedReason } : dspCheck
+  const check = dspCheck
   const total = dspTotal(patch)
   const sel = Math.min(state.selectedBlock, patch.blocks.length - 1)
   const block = patch.blocks[sel]
@@ -91,6 +92,14 @@ export function EditorPage({ initial, sourceLabel, pedal, writeBlockedReason }: 
               {' '}· pedal en {String(sync.pedalProgram + 1).padStart(2, '0')} {state.slots[sync.pedalProgram]?.device.name}
             </span>
           )}
+          {pedal && (
+            <label
+              className="live-toggle"
+              title="En vivo: lo que editas suena en el pedal al momento. Si sales del patch sin guardar, la app restaura el original."
+            >
+              <input type="checkbox" checked={live} onChange={(e) => setLive(e.target.checked)} disabled={!!sync.busy} /> En vivo
+            </label>
+          )}
         </div>
         <div className="patch-title">
           <span className="slotnum">{String(state.current + 1).padStart(2, '0')}</span>
@@ -107,15 +116,15 @@ export function EditorPage({ initial, sourceLabel, pedal, writeBlockedReason }: 
         <div className="actions">
           <button
             onClick={() => void sync.revert()}
-            disabled={(!dirty && !pedal) || sync.busy}
+            disabled={(!dirty && !pedal) || !!sync.busy}
             title={pedal ? 'Descarta los cambios y vuelve a leer el patch del pedal' : 'Descarta los cambios'}
           >
-            {sync.busy ? 'Leyendo…' : 'Revertir'}
+            Revertir
           </button>
           <button
             className="primary"
-            onClick={() => dispatch({ type: 'save' })}
-            disabled={!dirty || !check.ok}
+            onClick={() => void sync.save()}
+            disabled={!dirty || !check.ok || !!sync.busy}
             title={!check.ok ? check.reason : undefined}
             aria-describedby={!dspCheck.ok ? 'save-block-reason' : undefined}
           >
@@ -127,6 +136,27 @@ export function EditorPage({ initial, sourceLabel, pedal, writeBlockedReason }: 
       {(!dspCheck.ok || state.saveError) && (
         <div className="banner bad" id="save-block-reason" role="alert">
           <strong>Guardar bloqueado.</strong> {state.saveError ?? dspCheck.reason}
+        </div>
+      )}
+      {sync.busy && (
+        <div className="banner" role="status">
+          {sync.busy}
+        </div>
+      )}
+      {sync.pending && (
+        <div className="banner warn" role="alert">
+          <strong>
+            El patch {String(sync.pending.slot + 1).padStart(2, '0')} “{sync.pending.name}” pudo quedar con cambios sin guardar
+          </strong>{' '}
+          (la app se cerró mientras editabas en vivo). ¿Lo restauro a como estaba?{' '}
+          <button onClick={() => void sync.restorePending()}>Restaurar</button>{' '}
+          <button onClick={sync.dismissPending}>Dejarlo así</button>
+        </div>
+      )}
+      {pedal && live && (
+        <div className="banner hint">
+          En vivo: lo que editas suena en el pedal. Si cambias de patch, revierte o desconectas sin guardar, la app restaura el original. Lo
+          que muevas en el propio pedal cuenta como edición y también se revierte si no guardas.
         </div>
       )}
       {sync.error && (
@@ -280,7 +310,12 @@ export function EditorPage({ initial, sourceLabel, pedal, writeBlockedReason }: 
           to={state.slots[state.pendingSwitch].working.name}
           canSave={check.ok}
           reason={check.reason}
-          onChoice={(choice) => dispatch({ type: 'resolveSwitch', choice })}
+          onChoice={(choice) => {
+            if (choice === 'save' && pedal) {
+              // Write first; once saved the patch is clean and switching discards nothing.
+              void sync.save().then((ok) => dispatch({ type: 'resolveSwitch', choice: ok ? 'discard' : 'cancel' }))
+            } else dispatch({ type: 'resolveSwitch', choice })
+          }}
         />
       )}
     </div>

@@ -37,6 +37,9 @@
 .banner { padding: 8px 16px; border-bottom: 1px solid var(--e-line); }
 .banner.bad { background: color-mix(in srgb, var(--e-bad) 14%, var(--e-bg)); color: var(--e-text); }
 .banner.bad strong { color: var(--e-bad); }
+.banner.hint { color: var(--e-muted); font-size: 12px; padding: 6px 16px; }
+.live-toggle { margin-left: 12px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.live-toggle input { vertical-align: middle; }
 .banner.warn { background: color-mix(in srgb, var(--e-warn) 14%, var(--e-bg)); }
 .banner.warn strong { color: var(--e-warn); }
 .banner button { margin-left: 4px; padding: 3px 10px; }

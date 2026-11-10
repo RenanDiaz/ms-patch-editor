@@ -12,6 +12,8 @@ interface Props {
   connect?: () => Promise<WebMidiConnection>
   /** Injected in tests (timings). */
   sessionOptions?: ConstructorParameters<typeof PedalSession>[1]
+  /** Live listening on at start (default true). */
+  liveDefault?: boolean
 }
 
 type Phase =
@@ -20,14 +22,12 @@ type Phase =
   | { kind: 'error'; message: string }
   | { kind: 'ready'; session: PedalSession; initial: BankState; ports: string }
 
-export const WRITE_BLOCKED = 'Guardar en el pedal todavía no está disponible en esta versión (solo lectura).'
-
 /**
- * The editor on the real pedal, read-only: connect, read the 50 patches,
- * edit locally, Revert re-reads from the pedal, changes made on the pedal are
- * detected. Save is disabled until writing is enabled (spec §3, CLAUDE.md rule 1).
+ * The editor on the real pedal: connect, read the 50 patches, edit with live
+ * listening (or without), Save, Revert; changes made on the pedal are
+ * followed. Writes only from the user's actions (spec §3, CLAUDE.md rules 1 and 3).
  */
-export function PedalEditorPage({ connect = connectWebMidi, sessionOptions }: Props) {
+export function PedalEditorPage({ connect = connectWebMidi, sessionOptions, liveDefault = true }: Props) {
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' })
 
   useEffect(() => {
@@ -55,7 +55,7 @@ export function PedalEditorPage({ connect = connectWebMidi, sessionOptions }: Pr
         initial={() => phase.initial}
         sourceLabel={`PEDAL · fw ${phase.initial.firmware.toFixed(2)}`}
         pedal={phase.session}
-        writeBlockedReason={WRITE_BLOCKED}
+        liveDefault={liveDefault}
       />
     )
   }
@@ -66,7 +66,7 @@ export function PedalEditorPage({ connect = connectWebMidi, sessionOptions }: Pr
         <h1>MS-60B Edit</h1>
         <p>
           Conecta el pedal por USB y pulsa <strong>Conectar</strong>. La app lee los 50 patches (unos 9 s): para eso
-          cambia de patch en el pedal y al final vuelve al que tenías activo. No escribe nada.
+          cambia de patch en el pedal y al final vuelve al que tenías activo. Al conectar no escribe nada.
         </p>
         <p className="muted">Necesita Chrome o Edge, y permiso de MIDI con sysex.</p>
         <button className="primary" onClick={start} disabled={phase.kind === 'busy'}>

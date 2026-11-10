@@ -33,7 +33,7 @@ Agreed with the user. See `docs/protocol.md` for bytes and sources.
 | Write (persisted) | Send Patch `0x28` (persists by itself on fw 2.10, AUTO SAVE ON or OFF), Store Patch `0x32` | Needs explicit approval |
 | Forbidden | Unknown `0x60`, anything firmware/update related | Never send |
 
-Enforced in code by `src/transport/readOnlyGuard.ts` (`readOnly()`): every scan goes through it. The only write path is `src/transport/approvedWrites.ts` (`withApprovedWrites()`): it lets through exactly the approved 0x28/0x32 bytes, in order, once each. Never call it without the user's approval for that operation.
+Enforced in code by `src/transport/readOnlyGuard.ts` (`readOnly()`): every scan goes through it. The only write path is `src/transport/approvedWrites.ts` (`withApprovedWrites()`): it lets through exactly the listed 0x28/0x31/0x32 bytes, in order, once each. In the app it is called by `PedalSession` (`sendLive`, `save`, `emergencyRestore`) only as the result of the user's own actions (editing in live mode, Save, Revert, switching patch, closing). Claude must not trigger writes on the pedal (tests, scripts, browser automation) without the user's approval in chat for that operation.
 
 Not ported from g200kg: the autosave timer and `InstallChecker` (it writes test effects into patch 49).
 
