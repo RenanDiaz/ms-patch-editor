@@ -276,4 +276,4 @@ Prueba aprobada por el usuario en la ranura 33 (copia de "Octaver" con 4 efectos
   - las sesiones se cierran cuando se recarga en caliente el módulo;
   - la restauración de emergencia al cerrar la página solo actúa sobre el patch que la app sabe que está activo.
 
-  La ranura 32 se puede restaurar desde la captura de S1, con aprobación.
+  Con la aprobación del usuario, la ranura 32 se restauró desde la captura de S1 (relectura idéntica, ack). Después, una lectura completa del banco coincidió con la captura de S1 en todas las ranuras salvo la 20, que el usuario cambió con la utilidad de g200kg antes de S3.
