@@ -8,7 +8,9 @@ import {
   dspTotal,
   MAX_BLOCKS,
   moveBlock,
+  NAME_MAX,
   removeBlock,
+  rename,
   setParam,
   toggleBlock,
   type Patch,
@@ -103,7 +105,7 @@ export function EditorPage({ initial, sourceLabel, pedal, liveDefault = true }: 
         </div>
         <div className="patch-title">
           <span className="slotnum">{String(state.current + 1).padStart(2, '0')}</span>
-          <span className="pname">{patch.name}</span>
+          <PatchName key={state.current} name={patch.name} onRename={(n) => edit((p) => rename(p, n))} />
           {dirty && <span className="dirty-pill">sin guardar</span>}
         </div>
         <div className="dsp-total" title="Uso de DSP estimado (g200kg). Los efectos en OFF también consumen.">
@@ -319,6 +321,44 @@ export function EditorPage({ initial, sourceLabel, pedal, liveDefault = true }: 
         />
       )}
     </div>
+  )
+}
+
+function PatchName({ name, onRename }: { name: string; onRename: (n: string) => void }) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(name)
+  if (!editing) {
+    return (
+      <button
+        className="pname pname-btn"
+        title="Clic para cambiar el nombre (hasta 10 caracteres)"
+        onClick={() => {
+          setDraft(name)
+          setEditing(true)
+        }}
+      >
+        {name || '—'}
+      </button>
+    )
+  }
+  const commit = () => {
+    onRename(draft)
+    setEditing(false)
+  }
+  return (
+    <input
+      className="pname pname-input"
+      aria-label="Nombre del patch"
+      autoFocus
+      value={draft}
+      maxLength={NAME_MAX}
+      onChange={(e) => setDraft(e.target.value.replace(/[^\x20-\x7e]/g, ''))}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') commit()
+        else if (e.key === 'Escape') setEditing(false)
+      }}
+    />
   )
 }
 

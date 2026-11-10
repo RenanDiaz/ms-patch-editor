@@ -138,6 +138,22 @@ describe('live listening (simulated pedal)', () => {
   })
 })
 
+describe('rename on the pedal (simulated)', () => {
+  it('live: the new name goes to the buffer as a 0x28; Save keeps it', async () => {
+    const { pedal } = await connected()
+    fireEvent.click(screen.getByRole('button', { name: nameOf(active) }))
+    const input = screen.getByRole('textbox', { name: 'Nombre del patch' })
+    fireEvent.change(input, { target: { value: 'Mi Fuzz' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await waitFor(() => expect(decodePatch60B(pedal.buffer).name).toBe('Mi Fuzz'))
+    expect(writes(pedal.sent).map((m) => m[4])).toEqual([0x28])
+    await settle()
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }))
+    await waitFor(() => expect(screen.queryByText('sin guardar')).not.toBeInTheDocument())
+    expect(decodePatch60B(pedal.memory[active]).name).toBe('Mi Fuzz')
+  })
+})
+
 describe('live listening off (simulated pedal)', () => {
   it('sends nothing while editing; a knob turned on the pedal with unsaved changes is a conflict', async () => {
     const { pedal } = await connected({ live: false })

@@ -26,6 +26,10 @@
 .patch-title { display: flex; align-items: baseline; gap: 10px; flex: 1; min-width: 200px; }
 .patch-title .slotnum { font-family: var(--mono); color: var(--e-muted); }
 .patch-title .pname { font-family: var(--mono); font-size: 20px; }
+.editor .pname-btn { background: none; border: 1px solid transparent; padding: 0 4px; border-radius: 4px; cursor: text; }
+.editor .pname-btn:hover { border-color: var(--e-line); }
+.pname-input { width: 11ch; background: var(--e-panel2); color: var(--e-text); border: 1px solid var(--e-accent);
+  border-radius: 4px; padding: 0 4px; }
 .dirty-pill { font-size: 12px; color: var(--e-warn); border: 1px solid var(--e-warn); border-radius: 10px; padding: 0 8px; }
 .dsp-total { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--e-muted); }
 .meter { width: 140px; height: 8px; background: var(--e-panel2); border-radius: 4px; overflow: hidden; }

@@ -60,4 +60,18 @@ describe('S2 editor prototype (fake data, #/demo)', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancelar', hidden: true }))
     expect(screen.getByText('FAKE Clean', { selector: '.pname' })).toBeInTheDocument()
   })
+
+  it('renames the patch from the header (Enter applies, Esc cancels)', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'FAKE Clean' }))
+    const input = screen.getByRole('textbox', { name: 'Nombre del patch' })
+    fireEvent.change(input, { target: { value: 'Ñu Slap' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(screen.getByRole('button', { name: 'u Slap' })).toBeInTheDocument()
+    expect(screen.getByText('sin guardar')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'u Slap' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Nombre del patch' }), { target: { value: 'Otro' } })
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Nombre del patch' }), { key: 'Escape' })
+    expect(screen.getByRole('button', { name: 'u Slap' })).toBeInTheDocument()
+  })
 })
