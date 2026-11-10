@@ -228,3 +228,26 @@ Log: `ms60b-s3-log-2026-11-10T21-08-11-220Z.json` (fuera del repo). Siempre en l
   - `0x28` pasa a la clase "escritura persistente" en `CLAUDE.md`.
   - Un modo en vivo basado en `0x28` guardaría cada cambio en la ranura.
   - El único candidato para escuchar en vivo sin persistir es `0x31`, sin probar.
+
+### 9.3 Escucha en vivo: pruebas de `0x31` y de cuándo se guarda `0x28` (2026-11-10)
+
+Aprobadas por el usuario y ejecutadas por Claude en su Chrome, siempre en la ranura 33. Log: `ms60b-s3-log-2026-11-10T22-49-36-405Z.json` (fuera del repo). Al final, la ranura 33 quedó igual a la captura de S1.
+
+- **Preparación:** se escribió en la ranura 33 una copia de "Octaver" (4 efectos; el 4 apagado) llamada "S3 TEST". Relectura idéntica y ack de Store.
+- **`0x31` en la perilla 1 de los 4 efectos**, leyendo el buffer sin salir del patch y después de cambiar a otra ranura y volver:
+
+| AUTO SAVE | Efectos 1-3 | Efecto 4 (apagado) |
+|---|---|---|
+| ON | se aplica en el buffer y queda guardado al salir | no se aplica |
+| OFF | se aplica en el buffer y queda guardado al salir | no se aplica |
+
+  Coincide con la nota de g200kg ("solo efectos 1-3"). No se probó con el efecto 4 encendido.
+- **`0x28` sin salir del patch y reinicio del pedal** (AUTO SAVE OFF): después del reinicio, la ranura tenía lo de antes. **El `0x28` no se guarda al recibirlo**: se guarda al salir del patch.
+
+**Modelo que resulta (firmware 2.10):** `0x28` y `0x31` cambian el buffer de edición del patch activo. El pedal guarda ese buffer en la ranura cuando se sale del patch, haya o no Store y esté como esté AUTO SAVE. Si el pedal se apaga sin salir del patch, el cambio se pierde. No se probó qué hace AUTO SAVE ON con un `0x28` al reiniciar sin salir del patch.
+
+**Consecuencias para la escucha en vivo:**
+- Antes de salir de un patch sin guardar (cambiar de patch desde la app, Revertir, desconectar), la app debe enviar el patch original con `0x28`. Así el pedal guarda el original al salir.
+- Si el usuario cambia de patch en el propio pedal mientras edita en vivo, el pedal ya habrá guardado la versión editada en la ranura anterior. La app lo detecta por el `C0` y tiene que restaurar esa ranura, o al menos avisar.
+- Si la app se cierra mientras el pedal está en el patch editado, el cambio solo queda guardado si después se cambia de patch en el pedal. Si se apaga el pedal, se pierde.
+- `0x31` no sirve para el efecto 4. Para ese efecto, y para cambios de cadena (tipo, orden, agregar, quitar), se usa `0x28`.
