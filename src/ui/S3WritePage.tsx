@@ -88,6 +88,9 @@ export function S3WritePage() {
       cap.log.forEach((l) => logRef.current.push(l))
       setBackup(cap)
       setDownloaded(false)
+      // Prefer a slot the user keeps empty (THRU only), e.g. "Empty".
+      const empty = cap.patches.findIndex((p) => decodePatch60B(p).effects.slice(0, 1).every((e) => e.id === 0))
+      if (empty >= 0) setSlot(empty)
       if (cap.identity.version !== '2.10') setError(`Firmware ${cap.identity.version}: las pruebas se prepararon con 2.10.`)
     })
 
