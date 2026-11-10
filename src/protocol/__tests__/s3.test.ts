@@ -4,8 +4,19 @@ import type { MidiMessage, MidiTransport } from '../../transport/MidiTransport'
 import { InvalidApprovalError, withApprovedWrites } from '../../transport/approvedWrites'
 import { BlockedWriteError } from '../../transport/readOnlyGuard'
 import { decodePatch60B, encodePatch60B } from '../patch60b'
-import { autoSaveApproval, autoSaveProbe, currentProgram, readSlot, writeApproval, writeSlot, type S3Context } from '../s3'
-import { isKnownWriteMessage, isStoreAck, sendPatch, storePatch } from '../writeMessages'
+import {
+  autoSaveApproval,
+  autoSaveProbe,
+  currentProgram,
+  paramEditApproval,
+  paramEditProbe,
+  readSlot,
+  sendAndStay,
+  writeApproval,
+  writeSlot,
+  type S3Context,
+} from '../s3'
+import { isKnownWriteMessage, isStoreAck, parameterEdit, sendPatch, storePatch } from '../writeMessages'
 
 const bytes = (h: string) => h.split(' ').map((x) => parseInt(x, 16))
 const bank = cap.patches.map(bytes)
@@ -75,11 +86,20 @@ describe('write messages', () => {
     expect(() => sendPatch([0xf0, 0xf7])).toThrow(RangeError)
     expect(Array.from(sendPatch(bank[0]))).toEqual(bank[0])
   })
-  it('known writes are only 0x28 patches and well-formed 0x32', () => {
+  it('Parameter Edit bytes match g200kg (midimessage.md: knob 1 of effect 1 to 50)', () => {
+    expect(Array.from(parameterEdit(0, 2, 50))).toEqual([0xf0, 0x52, 0x00, 0x5f, 0x31, 0x00, 0x02, 0x32, 0x00, 0xf7])
+    expect(Array.from(parameterEdit(3, 10, 0x108))).toEqual([0xf0, 0x52, 0x00, 0x5f, 0x31, 3, 10, 0x08, 0x02, 0xf7])
+    expect(() => parameterEdit(4, 2, 0)).toThrow(RangeError)
+    expect(() => parameterEdit(0, 1, 0)).toThrow(RangeError) // type changes are not sent with 0x31
+  })
+
+  it('known writes are only 0x28 patches, well-formed 0x31 and well-formed 0x32', () => {
     expect(isKnownWriteMessage(bank[0])).toBe(true)
     expect(isKnownWriteMessage(storePatch(0))).toBe(true)
     expect(isKnownWriteMessage([0xf0, 0x52, 0x00, 0x5f, 0x60, 0xf7])).toBe(false)
-    expect(isKnownWriteMessage([0xf0, 0x52, 0x00, 0x5f, 0x31, 0, 2, 50, 0, 0xf7])).toBe(false)
+    expect(isKnownWriteMessage([0xf0, 0x52, 0x00, 0x5f, 0x31, 0, 2, 50, 0, 0xf7])).toBe(true)
+    expect(isKnownWriteMessage([0xf0, 0x52, 0x00, 0x5f, 0x31, 0, 1, 50, 0, 0xf7])).toBe(false)
+    expect(isKnownWriteMessage([0xf0, 0x52, 0x00, 0x5f, 0x31, 5, 2, 50, 0, 0xf7])).toBe(false)
     const badStore = Array.from(storePatch(0))
     badStore[8] = 60
     expect(isKnownWriteMessage(badStore)).toBe(false)
@@ -185,5 +205,23 @@ describe('S3 procedures (simulated pedal)', () => {
     const r = await autoSaveProbe(ctxFor(pedal.transport), SLOT, t, autoSaveApproval(t, SLOT), 0)
     expect(r.persisted).toBe(persisted)
     expect(pedal.sent.some((m) => m[4] === 0x32)).toBe(false)
+  })
+
+  it('0x31 probe sends exactly the approved edits, reads the buffer and the stored slot', async () => {
+    const pedal = fakePedal()
+    const edits = [0, 1, 2, 3].map((effect) => ({ effect, param: 2, value: 7 }))
+    const r = await paramEditProbe(ctxFor(pedal.transport), SLOT, edits, paramEditApproval(SLOT, edits), 0)
+    expect(r.buffer).toEqual(bank[SLOT]) // the simulated pedal ignores 0x31
+    expect(r.stored).toEqual(bank[SLOT])
+    expect(pedal.sent.filter((m) => m[4] === 0x31)).toEqual(edits.map((e) => Array.from(parameterEdit(e.effect, e.param, e.value))))
+    expect(pedal.sent.some((m) => m[4] === 0x28 || m[4] === 0x32)).toBe(false)
+  })
+
+  it('sendAndStay sends C0 + 0x28 and does not switch away', async () => {
+    const pedal = fakePedal()
+    const t = testPatch()
+    await sendAndStay(ctxFor(pedal.transport), SLOT, t, autoSaveApproval(t, SLOT))
+    expect(pedal.sent.map((m) => (m[0] === 0xc0 ? `c0 ${m[1]}` : m[4].toString(16)))).toEqual(['c0 49', '28'])
+    expect(pedal.program).toBe(SLOT)
   })
 })

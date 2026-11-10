@@ -32,9 +32,13 @@ Esto sigue a AX8-Edit y reemplaza el auto guardado de la utilidad de g200kg.
 - Cambiar de patch con cambios sin guardar pide confirmación: guardar, descartar o cancelar.
 - Si el usuario cambia algo en el pedal mientras hay cambios sin guardar en la app, la app muestra el conflicto y deja elegir cuál copia conservar.
 - **Verificado en S3 (ver `docs/protocol.md` §9.2), firmware 2.10:** el pedal guarda en la ranura todo patch que recibe por `0x28` (Send Patch), con AUTO SAVE encendido o apagado, y el cambio sobrevive un reinicio. Store (`0x32`) responde con un ack `F0 52 00 5F 00 00 F7` unos 2,5 s después. Lo que corrige de S0: `0x28` no es solo buffer de edición, y AUTO SAVE no influye en lo que llega por MIDI.
-- **v1 sin escucha en vivo.** Mientras se edita, la app no envía `0x28` ni `0x31`; los cambios viven solo en la copia de trabajo. `0x28` solo sale con Guardar.
+- **Escucha en vivo (decisión del usuario, 2026-11-10):** lo que se edita en la app se envía al pedal para escucharlo al momento. Solo Guardar deja el cambio como permanente. Al salir de un patch sin guardar (cambiar de patch, Revertir, desconectar), la app vuelve a enviar el patch original y relee la ranura para comprobarlo.
 - **Guardar** envía `C0 pp`, `0x28` y `0x32`, espera el ack (hasta 4 s), relee la ranura y solo limpia el indicador si la relectura coincide con lo escrito. Guardar cambia el patch activo del pedal; al terminar, la app vuelve al patch que estaba activo.
-- **Escucha en vivo:** queda fuera de v1. Con `0x28` no es posible, porque cada cambio quedaría guardado. El único candidato es Parameter Edit `0x31`; antes de diseñarlo hay que probar en el pedal, con aprobación, si `0x31` persiste y si funciona en los 4 efectos.
+- **Mecanismo de la escucha en vivo, pendiente de prueba (aprobada):**
+  - Si Parameter Edit `0x31` cambia lo que suena sin guardarse y funciona en los 4 efectos, se usa para los parámetros. Si no, se usa `0x28`, que sí se guarda.
+  - Se prueba también si `0x28` se guarda al recibirlo o al salir del patch.
+  - Riesgo si la app se cierra de golpe: la ranura queda editada. Mitigación: antes del primer cambio, la app guarda en el navegador la ranura y sus bytes originales, y al reconectar ofrece restaurarla.
+- **Advertencia al usuario:** lo que se mueve en el propio pedal con AUTO SAVE encendido lo guarda el pedal.
 - **Cambios hechos en el pedal:** con AUTO SAVE encendido los guarda el pedal por su cuenta. La app solo los detecta (el pedal emite `0x31` y `C0 pp`) y los muestra como conflicto, según la regla anterior.
 - **Otras herramientas:** la utilidad de g200kg envía `0x28` en cada clic, así que escribe en el pedal aunque su AutoSave esté apagado. Ningún mensaje conocido lee los ajustes globales del pedal; el único sin descifrar, `0x60`, está prohibido.
 

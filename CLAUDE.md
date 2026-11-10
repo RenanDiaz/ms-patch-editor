@@ -17,7 +17,7 @@ npm run lint       # oxlint
 
 1. **Never write to the pedal without the user's explicit approval in chat, for each write operation.**
 2. **Never touch firmware or the updater.** No code that sends update messages.
-3. **No auto-save.** Writes only happen from the Save button.
+3. **No auto-save.** Only the Save button makes a change permanent. Live listening (changed by the user on 2026-11-10) may write while editing, but it must always restore the original patch when leaving it without saving (switching patch, Revert, disconnecting).
 4. **Parameter names, ranges and values come from a verified source** (Zoom manual in `docs/`, or g200kg's code), never from memory. If a value cannot be verified, leave it out and record it as pending.
 5. **Code ported from g200kg** keeps its MIT copyright notice in every affected file and is listed in `THIRD_PARTY_NOTICES.md`.
 

@@ -16,7 +16,7 @@ import { readOnly } from '../transport/readOnlyGuard'
 import { parseProgramChange, PATCH_SLOTS, programChange, requestCurrentProgram, requestPatch } from './messages'
 import { isPatchData60B } from './patch60b'
 import type { LogEntry } from './scanBank'
-import { isStoreAck, sendPatch, storePatch } from './writeMessages'
+import { isStoreAck, parameterEdit, sendPatch, storePatch } from './writeMessages'
 
 export class S3Error extends Error {}
 
@@ -204,5 +204,58 @@ export function autoSaveProbe(
     await s.sleep(waitMs)
     const stored = await readStored(s, slot)
     return { stored, persisted: diffOffsets(stored, bytes).length === 0 }
+  })
+}
+
+export interface ParamEdit {
+  effect: number
+  param: number
+  value: number
+}
+
+export const paramEditApproval = (slot: number, edits: readonly ParamEdit[]): WriteApproval => ({
+  label: `Enviar ${edits.length} Parameter Edit (0x31) al patch ${slot + 1}`,
+  writes: edits.map((e) => parameterEdit(e.effect, e.param, e.value)),
+})
+
+export interface ParamEditResult {
+  /** Edit buffer right after the 0x31 messages (0x29 without leaving the patch). */
+  buffer: number[]
+  /** Slot after switching away and back. */
+  stored: number[]
+}
+
+/**
+ * 0x31 probe (spec §3, live listening): C0 pp → 0x31 × n → wait → read the
+ * buffer → switch away and back → read again. Shows whether 0x31 changes
+ * what sounds, on which effects, and whether it is kept.
+ */
+export function paramEditProbe(
+  ctx: S3Context,
+  slot: number,
+  edits: readonly ParamEdit[],
+  approval: WriteApproval,
+  waitMs = 500,
+): Promise<ParamEditResult> {
+  const io = withApprovedWrites(ctx.transport, approval)
+  return withSession(ctx, io, async (s) => {
+    await s.send(programChange(slot))
+    for (const e of edits) await s.send(parameterEdit(e.effect, e.param, e.value))
+    await s.sleep(waitMs)
+    const buffer = Array.from(await s.request(requestPatch(), isPatchData60B, `buffer ${slot + 1}`))
+    const stored = await readStored(s, slot)
+    return { buffer, stored }
+  })
+}
+
+/**
+ * 0x28 timing probe: C0 pp → 0x28, and stay on the patch (no switching).
+ * The user then power-cycles the pedal and the slot is read again.
+ */
+export function sendAndStay(ctx: S3Context, slot: number, bytes: ArrayLike<number>, approval: WriteApproval): Promise<void> {
+  const io = withApprovedWrites(ctx.transport, approval)
+  return withSession(ctx, io, async (s) => {
+    await s.send(programChange(slot))
+    await s.send(sendPatch(bytes))
   })
 }

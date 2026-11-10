@@ -1,10 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { getEffect } from '../model/catalog'
 import { decodePatch60B, encodePatch60B } from '../protocol/patch60b'
 import {
   autoSaveApproval,
   autoSaveProbe,
   diffOffsets,
+  paramEditApproval,
+  paramEditProbe,
   selectProgram,
+  sendAndStay,
+  type ParamEdit,
   writeApproval,
   writeSlot,
   type S3Context,
@@ -16,11 +21,12 @@ import { toHex } from '../transport/readOnlyGuard'
 import { connectWebMidi } from '../transport/webMidi'
 import './S1ReadPage.css'
 
-type Op = 'test' | 'restore' | 'autosave'
+type Op = 'test' | 'restore' | 'autosave' | 'prepare' | 'param' | 'stay'
 interface Pending {
   op: Op
   approval: WriteApproval
   bytes: number[]
+  edits?: ParamEdit[]
 }
 interface Result {
   op: Op
@@ -63,6 +69,29 @@ export function S3WritePage() {
     const effects = d.effects.slice(0, Math.max(1, d.maxFx)).map((e, i) => (i === 0 ? { ...e, on: !e.on } : e))
     return Array.from(encodePatch60B(base, { name: TEST_NAME, effects }))
   }, [base])
+
+  // Experiment 0: a 4-effect patch to test 0x31 on every effect (copy of the first 4-effect patch, renamed).
+  const fourFx = useMemo(() => {
+    if (!backup) return null
+    const i = backup.patches.findIndex((p) => decodePatch60B(p).maxFx === 4)
+    if (i < 0) return null
+    const d = decodePatch60B(backup.patches[i])
+    const bytes = Array.from(encodePatch60B(backup.patches[i], { name: TEST_NAME, effects: d.effects }))
+    return { from: i, name: d.name, bytes }
+  }, [backup])
+
+  // Experiment 1: knob 1 (param index 2) of each effect, one step away from its current value.
+  const edits = useMemo((): ParamEdit[] => {
+    if (!base) return []
+    const d = decodePatch60B(base)
+    return d.effects.slice(0, d.maxFx).flatMap((e, effect) => {
+      const def = getEffect(e.id)?.params[0]
+      if (!def || def.range.kind !== 'linear') return []
+      const v = e.params[0]
+      return [{ effect, param: 2, value: v < def.range.max ? v + 1 : v - 1 }]
+    })
+  }, [base])
+  const [stay, setStay] = useState<{ bytes: number[]; backupBefore: BankCapture } | null>(null)
 
   async function run(label: string, fn: () => Promise<void>) {
     setBusy(label)
@@ -152,6 +181,16 @@ export function S3WritePage() {
         approval: writeApproval(slot, restoreBytes, `Restaurar la ranura ${n} a “${decodePatch60B(restoreBytes).name}” desde ${restoreFrom ? restoreFrom.label : 'el respaldo de esta sesión'}`),
       })
     if (op === 'autosave') setPending({ op, bytes: testBytes, approval: autoSaveApproval(testBytes, slot) })
+    if (op === 'prepare' && fourFx)
+      setPending({ op, bytes: fourFx.bytes, approval: writeApproval(slot, fourFx.bytes, `Preparar la ranura ${n}: copia de “${fourFx.name}” (4 efectos) llamada “${TEST_NAME}”`) })
+    if (op === 'param' && edits.length) setPending({ op, bytes: base, edits, approval: paramEditApproval(slot, edits) })
+    if (op === 'stay')
+      setPending({ op, bytes: testBytes, approval: { ...autoSaveApproval(testBytes, slot), label: `Enviar 0x28 al patch ${n} y quedarse en él (sin Store, sin cambiar de patch)` } })
+  }
+
+  const describeFx = (bytes: number[]) => {
+    const d = decodePatch60B(bytes)
+    return d.effects.slice(0, d.maxFx).map((e, i) => `${i + 1}:${e.on ? '' : '(off)'}${e.params[0]}`).join(' ')
   }
 
   const confirm = () => {
@@ -159,8 +198,29 @@ export function S3WritePage() {
     setPending(null)
     if (!p || original === null) return
     void run(p.approval.label + '…', async () => {
+      let leave = true
       try {
-        if (p.op === 'autosave') {
+        if (p.op === 'param') {
+          const r = await paramEditProbe(ctx(), slot, p.edits!, p.approval)
+          const before = decodePatch60B(base!)
+          const buf = decodePatch60B(r.buffer)
+          const sto = decodePatch60B(r.stored)
+          const per = p.edits!.map((e) => {
+            const was = before.effects[e.effect].params[0]
+            const inBuf = buf.effects[e.effect].params[0] === e.value
+            const kept = sto.effects[e.effect].params[0] === e.value
+            return `efecto ${e.effect + 1}: ${was}→${e.value} ${inBuf ? 'aplicado' : 'NO aplicado'} en el buffer, ${kept ? 'GUARDADO' : 'no guardado'} al salir y volver`
+          })
+          setResults((rs) => [...rs, { op: p.op, ok: true, text: per.join('; ') + `. Buffer: ${describeFx(r.buffer)} · ranura: ${describeFx(r.stored)}` }])
+        } else if (p.op === 'stay') {
+          await sendAndStay(ctx(), slot, p.bytes, p.approval)
+          setStay({ bytes: p.bytes, backupBefore: backup! })
+          leave = false
+          setResults((rs) => [
+            ...rs,
+            { op: p.op, ok: true, text: 'Enviado; el pedal sigue en este patch. Reinícialo sin tocar nada, luego Conectar y Respaldar: abajo se compara la ranura.' },
+          ])
+        } else if (p.op === 'autosave') {
           const r = await autoSaveProbe(ctx(), slot, p.bytes, p.approval)
           const same = diffOffsets(r.stored, base!).length === 0
           setResults((rs) => [
@@ -189,7 +249,7 @@ export function S3WritePage() {
           ])
         }
       } finally {
-        await selectProgram(ctx(), original)
+        if (leave) await selectProgram(ctx(), original)
       }
     })
   }
@@ -257,6 +317,30 @@ export function S3WritePage() {
               Descargar log
             </button>
           </div>
+          <h3>Escucha en vivo (pruebas aprobadas el 2026-11-10)</h3>
+          <div className="bar">
+            <button onClick={() => ask('prepare')} disabled={!canWrite || !fourFx}>
+              A. Preparar ranura con 4 efectos{fourFx ? ` (copia de ${fourFx.name})` : ''}…
+            </button>
+            <button onClick={() => ask('param')} disabled={!canWrite || edits.length === 0}>
+              B. Probar 0x31 en {edits.length} efecto(s)…
+            </button>
+            <button onClick={() => ask('stay')} disabled={!canWrite}>C. Enviar 0x28 y quedarse…</button>
+          </div>
+          {base && <p className="muted">Ranura ahora (efecto:perilla 1): {describeFx(base)}</p>}
+          {stay && stay.backupBefore !== backup && base && (
+            <p>
+              Prueba C, después del nuevo respaldo: la ranura{' '}
+              <strong>
+                {diffOffsets(base, stay.bytes).length === 0
+                  ? 'TIENE lo enviado (el 0x28 se guardó sin salir del patch)'
+                  : diffOffsets(base, stay.backupBefore.patches[slot]).length === 0
+                    ? 'tiene lo de antes (el 0x28 no se guardó)'
+                    : 'no coincide con lo enviado ni con lo de antes'}
+              </strong>
+              .
+            </p>
+          )}
           {results.length > 0 && (
             <ol className="s3-results">
               {results.map((r, i) => (
