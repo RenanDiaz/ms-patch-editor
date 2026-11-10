@@ -31,11 +31,12 @@ Esto sigue a AX8-Edit y reemplaza el auto guardado de la utilidad de g200kg.
 - **Guardar** escribe el patch de trabajo en su ranura del pedal. **Revertir** descarta los cambios y vuelve a leer del pedal.
 - Cambiar de patch con cambios sin guardar pide confirmación: guardar, descartar o cancelar.
 - Si el usuario cambia algo en el pedal mientras hay cambios sin guardar en la app, la app muestra el conflicto y deja elegir cuál copia conservar.
-- **Resuelto en S0 (ver `docs/protocol.md` §4):** sí existen mensajes para cambiar el buffer de edición sin persistir (`0x31`, `0x28`); solo `0x32` persiste. Ningún mensaje conocido lee los ajustes globales del pedal (AUTO SAVE incluido); el único sin descifrar, `0x60`, está prohibido.
-- **v1 sin escucha en vivo.** Mientras se edita, la app no envía `0x31` ni `0x28`; los cambios viven solo en la copia de trabajo. Guardar envía `C0 pp`, `0x28` y `0x32`. Funciona con AUTO SAVE del pedal encendido o apagado; no es requisito apagarlo.
-- **Escucha en vivo opcional.** Un modo que envía `0x31`/`0x28` en cada cambio. Al activarlo, la app pide al usuario confirmar que AUTO SAVE está apagado, porque no lo puede comprobar.
-- **Verificación en S3** (con aprobación): si AUTO SAVE persiste los cambios que llegan por MIDI. Si no los persiste, se quita el aviso del modo en vivo.
-- **Cambios hechos en el pedal** con AUTO SAVE encendido los guarda el pedal por su cuenta. La app solo los detecta (el pedal emite `0x31`) y los muestra como conflicto, según la regla anterior.
+- **Verificado en S3 (ver `docs/protocol.md` §9.2), firmware 2.10:** el pedal guarda en la ranura todo patch que recibe por `0x28` (Send Patch), con AUTO SAVE encendido o apagado, y el cambio sobrevive un reinicio. Store (`0x32`) responde con un ack `F0 52 00 5F 00 00 F7` unos 2,5 s después. Lo que corrige de S0: `0x28` no es solo buffer de edición, y AUTO SAVE no influye en lo que llega por MIDI.
+- **v1 sin escucha en vivo.** Mientras se edita, la app no envía `0x28` ni `0x31`; los cambios viven solo en la copia de trabajo. `0x28` solo sale con Guardar.
+- **Guardar** envía `C0 pp`, `0x28` y `0x32`, espera el ack (hasta 4 s), relee la ranura y solo limpia el indicador si la relectura coincide con lo escrito. Guardar cambia el patch activo del pedal; al terminar, la app vuelve al patch que estaba activo.
+- **Escucha en vivo:** queda fuera de v1. Con `0x28` no es posible, porque cada cambio quedaría guardado. El único candidato es Parameter Edit `0x31`; antes de diseñarlo hay que probar en el pedal, con aprobación, si `0x31` persiste y si funciona en los 4 efectos.
+- **Cambios hechos en el pedal:** con AUTO SAVE encendido los guarda el pedal por su cuenta. La app solo los detecta (el pedal emite `0x31` y `C0 pp`) y los muestra como conflicto, según la regla anterior.
+- **Otras herramientas:** la utilidad de g200kg envía `0x28` en cada clic, así que escribe en el pedal aunque su AutoSave esté apagado. Ningún mensaje conocido lee los ajustes globales del pedal; el único sin descifrar, `0x60`, está prohibido.
 
 ## 4. Alcance v1
 
@@ -82,8 +83,9 @@ Todos sin escrituras, salvo S3, que usa un patch de prueba respaldado antes.
 
 ### S3: Escritura controlada
 - **Pregunta:** ¿guardar desde la app deja el pedal en el estado esperado?
-- **Método:** respaldar el banco, escribir un patch de prueba en una ranura libre, leerlo de vuelta, restaurar.
+- **Método:** respaldar el banco, escribir un patch de prueba en una ranura elegida (no hay ranuras libres; se usó la 33, "Empty"), leerlo de vuelta, restaurar.
 - **Criterio de salida:** lectura idéntica al patch escrito y banco restaurado.
+- **Resultado (2026-11-10):** cumplido. Lectura idéntica y ranura restaurada a los bytes de la captura de S1. Detalle en `docs/protocol.md` §9.
 
 ## 8. Criterios de aceptación v1 (borrador)
 
@@ -97,6 +99,7 @@ Todos sin escrituras, salvo S3, que usa un patch de prueba respaldado antes.
 
 ## 9. Riesgos
 
+- **Escrituras no intencionales.** Cualquier `0x28` queda guardado. Mitigado con `withApprovedWrites()` como único camino de escritura y sin envíos fuera de Guardar.
 - **Conflictos con el pedal.** Cambios hechos en el pedal mientras la app tiene cambios sin guardar. Mitigado con la regla de conflicto de la sección 3.
 - **Parámetros incorrectos.** Mitigado con la verificación en S1 y S2.
 - **Límites de Chromium.** La versión web no corre en Safari.
