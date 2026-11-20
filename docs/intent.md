@@ -120,3 +120,14 @@ Todos sin escrituras, salvo S3, que usa un patch de prueba respaldado antes.
 
 1. ¿Empaquetas con Electron desde el inicio, o empiezas en web y decides después de S2?
 2. ¿Qué patches de referencia debe replicar el prototipo primero?
+
+## 12. Pendientes (ideas por implementar)
+
+### P1: Copiar y pegar un efecto entre patches
+- **Idea (usuario, 2026-11-20):** copiar un efecto con sus parámetros de un patch y pegarlo en el patch que se edita.
+- **Copiar:** guarda en el portapapeles de la app el ID del efecto, on/off y los 9 parámetros de una ranura. Solo lee.
+- **Pegar en ranura:** reemplaza la ranura elegida en el buffer de trabajo. Es local; no escribe en el pedal hasta Guardar.
+- **Insertar entre dos efectos:** es un cambio de cadena (`0x28`, escritura persistida). Con 4 ranuras llenas, desplaza y expulsa el último efecto. Requiere aprobación explícita.
+- **Duplicados:** no verificado. Ningún documento dice si un patch puede tener el mismo efecto en dos ranuras. Confirmar en el manual (pp. 24-28) o en una lectura del pedal antes de decidir si "pegar" agrega o reemplaza cuando ya existe.
+- **DSP:** el pegado puede exceder la capacidad (`dspstate`, `docs/protocol.md` §130). La app debe avisar, no asumir que cabe.
+- **Verificación:** nombres y rangos de cada parámetro desde `effectslist.js` o el manual, nunca de memoria.
