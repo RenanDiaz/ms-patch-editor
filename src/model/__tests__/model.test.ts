@@ -171,6 +171,10 @@ describe('rename', () => {
   it('keeps printable ASCII, cuts to 10, trims trailing spaces; empty or same name is a no-op', async () => {
     const { rename, cleanName } = await import('../patch')
     expect(cleanName('Año Nuevo!!!')).toBe('Ao Nuevo!!')
+    expect(cleanName('a"b*c/d:e<f>g?h\\i|j')).toBe('abcdefghij') // not offered by the pedal
+    expect(cleanName("!#$%&'()+,")).toBe("!#$%&'()+,")
+    expect(cleanName('-.;=@[]^_`')).toBe('-.;=@[]^_`')
+    expect(cleanName('{}~ Az09')).toBe('{}~ Az09')
     expect(cleanName('Bass   ')).toBe('Bass')
     expect(rename(p0, 'Slap Bass').name).toBe('Slap Bass')
     expect(rename(p0, '   ')).toBe(p0)

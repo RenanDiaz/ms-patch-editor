@@ -9,6 +9,7 @@ import {
   MAX_BLOCKS,
   moveBlock,
   NAME_MAX,
+  isNameChar,
   removeBlock,
   rename,
   setParam,
@@ -330,7 +331,7 @@ function PatchName({ name, onRename }: { name: string; onRename: (n: string) => 
     return (
       <button
         className="pname pname-btn"
-        title="Clic para cambiar el nombre (hasta 10 caracteres)"
+        title="Clic para cambiar el nombre: hasta 10 caracteres; letras, números, espacio y ! # $ % & ' ( ) + , - . ; = @ [ ] ^ _ ` { } ~"
         onClick={() => {
           setDraft(name)
           setEditing(true)
@@ -352,7 +353,7 @@ function PatchName({ name, onRename }: { name: string; onRename: (n: string) => 
       onFocus={(e) => e.target.select()}
       value={draft}
       maxLength={NAME_MAX}
-      onChange={(e) => setDraft(e.target.value.replace(/[^\x20-\x7e]/g, ''))}
+      onChange={(e) => setDraft([...e.target.value].filter(isNameChar).join(''))}
       onBlur={commit}
       onKeyDown={(e) => {
         if (e.key === 'Enter') commit()

@@ -289,3 +289,13 @@ Verificación de solo lectura (`0x33` + `0x29`, botón "Leer patch activo" de `#
 | OFF (0) | `0x00` / `0x00` | `0x20` / `0x20` | idéntico |
 
 Confirma las reglas de `MakeBin` que porta `encodePatch60B`: byte de gabinete `0x00` / `0x50` / `0x51` según el CAB, y byte v2 = `0x20` en los AMP de firmware 2. Los AMP de firmware 1 ya estaban confirmados con los 50 patches reales (§8, test `ampCheck.test.ts`). No se probaron los demás AMP de firmware 2 (G-Krueger, Heaven, SMR, Flip Top, Monotone); en `effectslist.js` comparten la misma regla.
+
+### 9.6 Caracteres del nombre de patch (2026-11-22)
+
+El usuario renombró el patch 33 en el propio pedal, en tres rondas, con todos los símbolos que ofrece su editor de nombres en el orden en que aparecen, y Claude leyó cada nombre con "Leer patch activo" (`#/s1`, solo lectura):
+
+1. `!#$%&'()+,`
+2. `-.;=@[]^_` y `` ` ``
+3. `{}~`
+
+Según el usuario, el editor del pedal empieza con el espacio, sigue con esos símbolos y termina con A-Z, a-z y 0-9. **No ofrece** `"` `*` `/` `:` `<` `>` `?` `\` `|`. La app solo acepta esos caracteres en los nombres (`isNameChar`, `src/model/patch.ts`).

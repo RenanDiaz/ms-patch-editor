@@ -102,14 +102,18 @@ export function setParam(p: Patch, i: number, param: number, value: number): Pat
 }
 
 /**
- * Characters accepted in a patch name: printable ASCII (what the 105-byte
- * format can hold). Which of them the pedal's display shows is not verified.
+ * Characters the pedal offers when renaming a patch (fw 2.10), read from the
+ * pedal on 2026-11-22: space, A-Z, a-z, 0-9 and ! # $ % & ' ( ) + , - . ; = @ [ ] ^ _ ` { } ~
+ * (not offered: " * / : < > ? \ |). See docs/protocol.md §9.6.
  */
-export const NAME_CHARS = /^[\x20-\x7e]*$/
+export const NAME_SYMBOLS = " !#$%&'()+,-.;=@[]^_`{}~"
+const NAME_CHAR = /[A-Za-z0-9 !#$%&'()+,\-.;=@[\]^_`{}~]/
 
-/** Cleans a typed name: drops other characters, cuts to 10, trims trailing spaces (the pedal pads with spaces). */
+export const isNameChar = (c: string) => c.length === 1 && NAME_CHAR.test(c)
+
+/** Cleans a typed name: drops characters the pedal does not offer, cuts to 10, trims trailing spaces (the pedal pads with spaces). */
 export function cleanName(name: string): string {
-  return name.replace(/[^\x20-\x7e]/g, '').slice(0, NAME_MAX).replace(/ +$/, '')
+  return [...name].filter(isNameChar).join('').slice(0, NAME_MAX).replace(/ +$/, '')
 }
 
 export function rename(p: Patch, name: string): Patch {
