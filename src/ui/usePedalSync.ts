@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch } from 'react'
-import { isDirty, type BankAction, type BankState } from '../model/bank'
+import { bankReducer, isDirty, type BankAction, type BankState } from '../model/bank'
 import { patchFromDevice } from '../model/fromDevice'
 import { liveMessages, toEncodable } from '../model/liveDiff'
 import { patchesEqual, type Patch } from '../model/patch'
@@ -48,6 +48,19 @@ export function usePedalSync(pedal: PedalSession | undefined, state: BankState, 
   useEffect(() => {
     stateRef.current = state
   })
+  /**
+   * Dispatch and update the state mirror right away, so code that runs before
+   * the next render (pedal operations, polling) never reads the previous
+   * version. Found in the usability test: a stale device copy after a restore
+   * left a false "unsaved changes" note that offered to undo the restore.
+   */
+  const act = useCallback(
+    (a: BankAction) => {
+      stateRef.current = bankReducer(stateRef.current, a)
+      dispatch(a)
+    },
+    [dispatch],
+  )
   const liveRef = useRef(live)
   useEffect(() => {
     liveRef.current = live
@@ -204,9 +217,9 @@ export function usePedalSync(pedal: PedalSession | undefined, state: BankState, 
       if (index !== stateRef.current.current) return
       bufferRef.current = { slot: index, patch }
       if (!patchesEqual(patch, slot.device)) notePending(index)
-      dispatch({ type: 'setWorking', index, patch })
+      act({ type: 'setWorking', index, patch })
     } else if (isDirty(slot)) setConflict({ index, patch, raw })
-    else dispatch({ type: 'loadSlot', index, patch, raw, mode: 'replace' })
+    else act({ type: 'loadSlot', index, patch, raw, mode: 'replace' })
   }
   const lastSeenRef = useRef<{ slot: number; patch: Patch } | null>(null)
 
@@ -249,7 +262,7 @@ export function usePedalSync(pedal: PedalSession | undefined, state: BankState, 
         setPedalProgram(e.slot)
         if (liveRef.current && e.slot !== stateRef.current.current) {
           movedByPedalRef.current = e.slot
-          dispatch({ type: 'followPedal', index: e.slot })
+          act({ type: 'followPedal', index: e.slot })
         }
       } else {
         clearTimeout(timer)
@@ -262,7 +275,7 @@ export function usePedalSync(pedal: PedalSession | undefined, state: BankState, 
     }
     // applyPedalBuffer reads refs only; re-subscribing on every render is not wanted.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pedal, dispatch, enqueue])
+  }, [pedal, act, enqueue])
 
   // Closing the page with live changes: best-effort restore of the buffer.
   useEffect(() => {
@@ -280,7 +293,7 @@ export function usePedalSync(pedal: PedalSession | undefined, state: BankState, 
 
   const revert = () => {
     if (!pedal) {
-      dispatch({ type: 'revert' })
+      act({ type: 'revert' })
       return Promise.resolve()
     }
     const index = stateRef.current.current
@@ -289,7 +302,7 @@ export function usePedalSync(pedal: PedalSession | undefined, state: BankState, 
       if (liveRef.current && pedal.activeProgram === index) await restoreBuffer(pedal, index)
       const raw = await pedal.readSlot(index)
       const patch = patchFromDevice(raw)
-      dispatch({ type: 'loadSlot', index, patch, raw, mode: 'replace' })
+      act({ type: 'loadSlot', index, patch, raw, mode: 'replace' })
       if (pedal.activeProgram === index) bufferRef.current = { slot: index, patch }
       if (conflict?.index === index) setConflict(null)
       const original = stateRef.current.slots[index].raw
@@ -300,7 +313,7 @@ export function usePedalSync(pedal: PedalSession | undefined, state: BankState, 
   /** Writes the working copy of the current patch. Resolves true when the read-back matches. */
   const save = async (): Promise<boolean> => {
     if (!pedal) {
-      dispatch({ type: 'save' })
+      act({ type: 'save' })
       return true
     }
     const index = stateRef.current.current
@@ -314,7 +327,7 @@ export function usePedalSync(pedal: PedalSession | undefined, state: BankState, 
       const r = await pedal.save(index, bytes)
       if (r.diff.length) throw new Error(`Guardado, pero la relectura difiere en los bytes ${r.diff.join(', ')}.`)
       const patch = patchFromDevice(r.readBack)
-      dispatch({ type: 'loadSlot', index, patch, raw: r.readBack, mode: 'replace' })
+      act({ type: 'loadSlot', index, patch, raw: r.readBack, mode: 'replace' })
       bufferRef.current = { slot: index, patch }
       clearPending(index)
       ok = true
@@ -343,7 +356,7 @@ export function usePedalSync(pedal: PedalSession | undefined, state: BankState, 
       out.cap = cap
       cap.patches.forEach((raw, index) => {
         const old = stateRef.current.slots[index].raw
-        if (!old || diffOffsets(old, raw).length) dispatch({ type: 'loadSlot', index, patch: patchFromDevice(raw), raw, mode: 'replace' })
+        if (!old || diffOffsets(old, raw).length) act({ type: 'loadSlot', index, patch: patchFromDevice(raw), raw, mode: 'replace' })
       })
       const a = pedal.activeProgram
       if (a !== null) bufferRef.current = { slot: a, patch: patchFromDevice(cap.patches[a]) }
@@ -377,7 +390,8 @@ export function usePedalSync(pedal: PedalSession | undefined, state: BankState, 
           onProgress(k, slot)
           try {
             const r = await pedal.save(slot, backup[slot])
-            dispatch({ type: 'loadSlot', index: slot, patch: patchFromDevice(r.readBack), raw: r.readBack, mode: 'replace' })
+            act({ type: 'loadSlot', index: slot, patch: patchFromDevice(r.readBack), raw: r.readBack, mode: 'replace' })
+            if (!r.diff.length) clearPending(slot)
             results.push(r.diff.length ? { slot, ok: false, message: `la relectura difiere en los bytes ${r.diff.join(', ')}` } : { slot, ok: true })
           } catch (e) {
             results.push({ slot, ok: false, message: (e as Error).message })
@@ -395,7 +409,7 @@ export function usePedalSync(pedal: PedalSession | undefined, state: BankState, 
 
   const resolveConflict = (keep: 'pedal' | 'mine') => {
     if (!conflict) return
-    dispatch({ type: 'loadSlot', index: conflict.index, patch: conflict.patch, raw: conflict.raw, mode: keep === 'pedal' ? 'replace' : 'deviceOnly' })
+    act({ type: 'loadSlot', index: conflict.index, patch: conflict.patch, raw: conflict.raw, mode: keep === 'pedal' ? 'replace' : 'deviceOnly' })
     setConflict(null)
   }
 
@@ -406,7 +420,7 @@ export function usePedalSync(pedal: PedalSession | undefined, state: BankState, 
       const back = pedal.activeProgram
       const r = await pedal.save(p.slot, p.raw)
       if (r.diff.length) throw new Error(`La relectura del patch ${p.slot + 1} difiere en los bytes ${r.diff.join(', ')}.`)
-      dispatch({ type: 'loadSlot', index: p.slot, patch: patchFromDevice(r.readBack), raw: r.readBack, mode: 'replace' })
+      act({ type: 'loadSlot', index: p.slot, patch: patchFromDevice(r.readBack), raw: r.readBack, mode: 'replace' })
       clearPending(p.slot)
       setPendingState(null)
       if (back !== null && back !== p.slot) await pedal.select(back)

@@ -224,6 +224,24 @@ describe('bank backup and restore (simulated pedal)', () => {
     expect(pedal.program).toBe(active)
   })
 
+  it('after saving and then restoring the active patch, no false "unsaved changes" note is left behind', async () => {
+    mockDownloads()
+    const { pedal } = await connected()
+    fireEvent.keyDown(firstKnob(), { key: 'ArrowUp' })
+    await settle()
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }))
+    await waitFor(() => expect(screen.queryByText('sin guardar')).not.toBeInTheDocument())
+    const input = document.querySelector('input[type=file]') as HTMLInputElement
+    fireEvent.change(input, { target: { files: [new File([JSON.stringify(cap)], 'orig.json', { type: 'application/json' })] } })
+    const dialog = await screen.findByRole('dialog', { hidden: true })
+    fireEvent.click(within(dialog).getByRole('button', { name: /Escribir 1 ranura/, hidden: true }))
+    await waitFor(() => expect(within(dialog).getByText(/1 de 1 ranuras restauradas/)).toBeInTheDocument())
+    expect(pedal.memory[active]).toEqual(original[active])
+    await act(() => new Promise((r) => setTimeout(r, 1300))) // let the buffer poll run
+    expect(readPending()).toBeNull()
+    expect(screen.queryByText('sin guardar')).not.toBeInTheDocument()
+  })
+
   it('refuses to back up or restore while there are unsaved changes', async () => {
     mockDownloads()
     const { pedal } = await connected({ live: false })
