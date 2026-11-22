@@ -181,3 +181,24 @@ describe('rename', () => {
     expect(rename(p0, 'T')).toBe(p0)
   })
 })
+
+describe('copy and paste of a block', () => {
+  it('replace keeps effect, ON/OFF and params of the copy, as a separate object', async () => {
+    const { copyBlock, pasteReplace } = await import('../patch')
+    const src = setParam(toggleBlock({ name: 's', blocks: [newBlock(byName('Delay'))] }, 0), 0, 0, 500).blocks[0]
+    const clip = copyBlock(src)
+    const out = pasteReplace(p0, 1, clip)
+    expect(out.blocks.map((b) => b.effectId)).toEqual([byName('M Comp'), byName('Delay'), byName('SVT')])
+    expect(out.blocks[1]).toEqual(src)
+    expect(out.blocks[1]).not.toBe(clip)
+    expect(out.blocks[1].params).not.toBe(clip.params)
+  })
+  it('insert: at a position, replaces a lone THRU, and with 4 blocks drops the last one', async () => {
+    const { pasteInsert } = await import('../patch')
+    const d = newBlock(byName('Delay'))
+    expect(pasteInsert(p0, 1, d).blocks.map((b) => b.effectId)).toEqual([byName('M Comp'), byName('Delay'), byName('Ba GEQ'), byName('SVT')])
+    expect(pasteInsert({ name: 'x', blocks: [newBlock(THRU_ID)] }, 1, d).blocks.map((b) => b.effectId)).toEqual([byName('Delay')])
+    const four = addBlock(p0, byName('OptComp'))
+    expect(pasteInsert(four, 0, d).blocks.map((b) => b.effectId)).toEqual([byName('Delay'), byName('M Comp'), byName('Ba GEQ'), byName('SVT')])
+  })
+})

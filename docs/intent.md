@@ -123,11 +123,10 @@ Todos sin escrituras, salvo S3, que usa un patch de prueba respaldado antes.
 
 ## 12. Pendientes (ideas por implementar)
 
-### P1: Copiar y pegar un efecto entre patches
+### P1: Copiar y pegar un efecto entre patches — implementado (2026-11-22)
 - **Idea (usuario, 2026-11-20):** copiar un efecto con sus parámetros de un patch y pegarlo en el patch que se edita.
-- **Copiar:** guarda en el portapapeles de la app el ID del efecto, on/off y los 9 parámetros de una ranura. Solo lee.
-- **Pegar en ranura:** reemplaza la ranura elegida en el buffer de trabajo. Es local; no escribe en el pedal hasta Guardar.
-- **Insertar entre dos efectos:** es un cambio de cadena (`0x28`, escritura persistida). Con 4 ranuras llenas, desplaza y expulsa el último efecto. Requiere aprobación explícita.
-- **Duplicados:** no verificado. Ningún documento dice si un patch puede tener el mismo efecto en dos ranuras. Confirmar en el manual (pp. 24-28) o en una lectura del pedal antes de decidir si "pegar" agrega o reemplaza cuando ya existe.
-- **DSP:** el pegado puede exceder la capacidad (`dspstate`, `docs/protocol.md` §130). La app debe avisar, no asumir que cabe.
-- **Verificación:** nombres y rangos de cada parámetro desde `effectslist.js` o el manual, nunca de memoria.
+- **Copiar:** botón ⧉ en cada bloque (o Cmd/Ctrl+C sobre el bloque seleccionado). Guarda en el portapapeles de la app el efecto, ON/OFF y los 9 parámetros. Solo lee. El portapapeles se mantiene al cambiar de patch.
+- **Pegar:** una barra muestra lo copiado y de dónde viene. "Reemplazar bloque N" (Cmd/Ctrl+V) cambia el bloque seleccionado; "Insertar antes/después de N" (Shift+Cmd/Ctrl+V = después) lo agrega. Un THRU solo se reemplaza. Con 4 bloques, insertar desplaza la cadena y quita el último; el botón dice cuál se quita.
+- **Escrituras:** pegar es una edición más del patch de trabajo. Con escucha en vivo se envía al pedal (`0x28`) y se revierte si no se guarda; solo Guardar la deja permanente. No hace falta una aprobación aparte.
+- **DSP:** si el pegado excede la capacidad estimada, Guardar se bloquea con la explicación, como con cualquier otro cambio.
+- **Pendiente: efectos repetidos.** Ningún documento dice si un patch puede tener el mismo efecto en dos ranuras, y ninguno de los 50 patches del usuario lo tiene. La app lo permite (también al agregar un efecto). Falta confirmarlo con el pedal: guardar un patch con un efecto repetido, releer y escuchar.

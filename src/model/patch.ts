@@ -120,3 +120,25 @@ export function rename(p: Patch, name: string): Patch {
   const n = cleanName(name)
   return n && n !== p.name ? { ...p, name: n } : p
 }
+
+// ---- copy / paste of a block (spec §12, P1) ----
+
+/** A copied block: effect, ON/OFF and the 9 parameter values. */
+export const copyBlock = (b: Block): Block => ({ effectId: b.effectId, on: b.on, params: [...b.params] })
+
+/** Replaces block `i` with the copied block. */
+export function pasteReplace(p: Patch, i: number, b: Block): Patch {
+  return withBlocks(p, p.blocks.map((x, k) => (k === i ? copyBlock(b) : x)))
+}
+
+/**
+ * Inserts the copied block at position `at` (0..length). A lone THRU is
+ * replaced instead. With 4 blocks the chain shifts and the last block is
+ * dropped (spec §12, P1).
+ */
+export function pasteInsert(p: Patch, at: number, b: Block): Patch {
+  if (p.blocks.length === 1 && p.blocks[0].effectId === THRU_ID) return pasteReplace(p, 0, b)
+  const blocks = [...p.blocks]
+  blocks.splice(Math.max(0, Math.min(at, blocks.length)), 0, copyBlock(b))
+  return withBlocks(p, blocks.slice(0, MAX_BLOCKS))
+}

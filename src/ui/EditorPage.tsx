@@ -10,6 +10,10 @@ import {
   moveBlock,
   NAME_MAX,
   isNameChar,
+  copyBlock,
+  pasteInsert,
+  pasteReplace,
+  type Block,
   removeBlock,
   rename,
   setParam,
@@ -41,6 +45,7 @@ export function EditorPage({ initial, sourceLabel, pedal, liveDefault = true }: 
   const [live, setLive] = useState(!!pedal && liveDefault)
   const sync = usePedalSync(pedal, state, dispatch, live)
   const [picker, setPicker] = useState<Picker>(null)
+  const [clip, setClip] = useState<{ block: Block; from: string } | null>(null)
   const [restore, setRestore] = useState<{ fileName: string; backup: BankBackup; items: RestoreItem[] } | null>(null)
   const [bankMsg, setBankMsg] = useState<string | null>(null)
   const restoreInput = useRef<HTMLInputElement>(null)
@@ -103,6 +108,41 @@ export function EditorPage({ initial, sourceLabel, pedal, liveDefault = true }: 
   }, [dirtyCount])
 
   const edit = (fn: (p: Patch) => Patch, selectBlock?: number) => dispatch({ type: 'edit', fn, selectBlock })
+
+  // Copy / paste of a block (spec §12, P1). Local edits like any other: live
+  // listening sends them, Save makes them permanent.
+  const copyAt = (i: number) => {
+    const b = patch.blocks[i]
+    if (!b || b.effectId === THRU_ID) return
+    setClip({ block: copyBlock(b), from: `bloque ${i + 1} de ${String(state.current + 1).padStart(2, '0')} ${patch.name}` })
+  }
+  const pasteOver = (i: number) => clip && edit((p) => pasteReplace(p, i, clip.block), i)
+  const pasteAt = (at: number) =>
+    clip && edit((p) => pasteInsert(p, at, clip.block), Math.min(at, MAX_BLOCKS - 1))
+
+  const shortcuts = useRef({ copyAt, pasteOver, pasteAt, sel: 0, len: 0 })
+  useEffect(() => {
+    shortcuts.current = { copyAt, pasteOver, pasteAt, sel, len: patch.blocks.length }
+  })
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey) return
+      const t = e.target
+      if (t instanceof Element && t.closest('input, textarea, select, dialog, [contenteditable="true"]')) return
+      if (window.getSelection()?.toString()) return // copying text on the page
+      const k = e.key.toLowerCase()
+      const s = shortcuts.current
+      if (k === 'c') s.copyAt(s.sel)
+      else if (k === 'v' && e.shiftKey) {
+        if (s.sel + 1 < MAX_BLOCKS || s.len < MAX_BLOCKS) s.pasteAt(s.sel + 1)
+      }
+      else if (k === 'v') s.pasteOver(s.sel)
+      else return
+      e.preventDefault()
+    }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [])
 
   const onDragStart = (i: number) => (e: DragEvent) => {
     dragFrom.current = i
@@ -320,12 +360,26 @@ export function EditorPage({ initial, sourceLabel, pedal, liveDefault = true }: 
                     <button aria-label="Mover a la izquierda" disabled={i === 0} onClick={(ev) => { ev.stopPropagation(); edit((p) => moveBlock(p, i, i - 1), i - 1) }}>◀</button>
                     <button aria-label="Mover a la derecha" disabled={i === patch.blocks.length - 1} onClick={(ev) => { ev.stopPropagation(); edit((p) => moveBlock(p, i, i + 1), i + 1) }}>▶</button>
                     <button aria-label="Quitar bloque" onClick={(ev) => { ev.stopPropagation(); edit((p) => removeBlock(p, i), Math.max(0, i - 1)) }}>✕</button>
+                    {!thru && (
+                      <button aria-label="Copiar bloque" title="Copiar efecto con sus parámetros (Cmd/Ctrl+C)" onClick={(ev) => { ev.stopPropagation(); copyAt(i) }}>⧉</button>
+                    )}
                   </div>
                 </div>
               )
             })}
             <div className="io">OUT</div>
           </section>
+
+          {clip && (
+            <ClipboardBar
+              clip={clip}
+              target={sel}
+              blocks={patch.blocks.map((b) => getEffect(b.effectId)?.name ?? (b.effectId === THRU_ID ? 'THRU' : '?'))}
+              onReplace={() => pasteOver(sel)}
+              onInsert={(at) => pasteAt(at)}
+              onClear={() => setClip(null)}
+            />
+          )}
 
           <section className="panel" aria-label="Parámetros del bloque">
             <header className="panel-head">
@@ -450,6 +504,45 @@ function PatchName({ name, onRename }: { name: string; onRename: (n: string) => 
         else if (e.key === 'Escape') setEditing(false)
       }}
     />
+  )
+}
+
+function ClipboardBar(props: {
+  clip: { block: Block; from: string }
+  target: number
+  blocks: string[]
+  onReplace: () => void
+  onInsert: (at: number) => void
+  onClear: () => void
+}) {
+  const { clip, target, blocks } = props
+  const name = getEffect(clip.block.effectId)?.name ?? '?'
+  const n = target + 1
+  const loneThru = blocks.length === 1 && blocks[0] === 'THRU'
+  const full = blocks.length >= MAX_BLOCKS
+  const drops = full && !loneThru ? ` (se quita ${blocks[MAX_BLOCKS - 1]})` : ''
+  return (
+    <div className="clipboard" role="region" aria-label="Portapapeles">
+      <span>
+        Copiado: <strong>{name}</strong>
+        {clip.block.on ? '' : ' (bypass)'} <span className="muted">· {clip.from}</span>
+      </span>
+      <span className="clip-actions">
+        <button onClick={props.onReplace} title="Cmd/Ctrl+V">Reemplazar bloque {n}</button>
+        {!loneThru && (
+          <>
+            <button onClick={() => props.onInsert(target)}>Insertar antes de {n}{drops}</button>
+            {!(full && target === MAX_BLOCKS - 1) && (
+              <button onClick={() => props.onInsert(target + 1)} title="Shift+Cmd/Ctrl+V">
+                Insertar después de {n}
+                {drops}
+              </button>
+            )}
+          </>
+        )}
+        <button className="ghost" onClick={props.onClear} aria-label="Vaciar portapapeles">✕</button>
+      </span>
+    </div>
   )
 }
 
