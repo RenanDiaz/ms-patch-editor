@@ -162,7 +162,7 @@ Fuente principal: tablas `bits`, `namidx`, `cabbyte`, `v2byte`, `maxfxidx` y fun
 7. Tiempos mínimos entre mensajes; g200kg usa 80 ms por mensaje sin timeouts.
 8. Qué tablas cambian según la versión de firmware además del gabinete. (El pedal tiene firmware 2.10; ver §8.)
 9. Que los rangos de `effectslist.js` coinciden con el pedal (procedimiento manual: llevar la perilla al extremo en el pedal y leer).
-10. Nombres de efectos: cruzar `effectslist.js` con el manual (pp. 24-28, "Effect Types") en S2.
+10. ~~Nombres de efectos~~ **Verificado (2026-11-22):** los 142 nombres de `effectslist.js` para el 60B (58 de firmware 1 y 84 de firmware 2) aparecen como títulos de efecto en la lista oficial de Zoom "Effect Types and Parameters (Ver.2)" (`docs/E_MS-60B_FX-list_v2.pdf`, descargada de zoomcorp.com). Los rangos y nombres de parámetros no se cruzaron uno por uno con ese documento.
 
 ## 7. Atribución
 

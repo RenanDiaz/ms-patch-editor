@@ -63,7 +63,7 @@ Esto sigue a AX8-Edit y reemplaza el auto guardado de la utilidad de g200kg.
 ## 6. Fuentes de datos
 
 - **Protocolo y tablas de parámetros:** código MIT de g200kg. Cada parámetro se verifica contra el pedal real en S1.
-- **Nombres de efectos y categorías:** manual de Zoom, sección "Effect Types".
+- **Nombres de efectos y categorías:** manual de Zoom, sección "Effect Types", y la lista oficial "Effect Types and Parameters (Ver.2)" (`docs/E_MS-60B_FX-list_v2.pdf`) para los efectos de firmware 2. Los 142 nombres coinciden con g200kg (verificado el 2026-11-22).
 - **Nunca desde memoria.** Si un valor no está en una de estas fuentes, no entra en la UI.
 
 ## 7. Spikes

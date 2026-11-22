@@ -15,7 +15,7 @@
  *    Note symbols in time lists were HTML entities in the source; decoded here.
  *  - dsp/dspmax/dspmin: g200kg's own estimate; usage % = 100 / dsp.
  *  - minFirmware: lowest firmware major version that has the effect.
- *  - Names here are g200kg's; they must be cross-checked with the Zoom manual.
+ *  - Names here are g200kg's; all 142 match Zoom's "Effect Types and Parameters (Ver.2)" (docs/E_MS-60B_FX-list_v2.pdf).
  */
 import type { EffectDef } from './effectTypes'
 

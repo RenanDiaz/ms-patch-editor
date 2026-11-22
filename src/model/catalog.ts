@@ -22,16 +22,18 @@ const GROUP_TO_CATEGORY: Record<string, Category | undefined> = {
 
 export const THRU_ID = 0
 
+/**
+ * Effect names: g200kg's effectslist.js. All 142 MS-60B names (58 firmware 1,
+ * 84 firmware 2) were checked on 2026-11-22 against Zoom's official
+ * "Effect Types and Parameters (Ver.2)", docs/E_MS-60B_FX-list_v2.pdf.
+ */
 export interface CatalogEffect extends EffectDef {
   category: Category | null
-  /** True when the name was checked against the manual we have (firmware-1 effects). */
-  nameVerified: boolean
 }
 
 export const CATALOG: readonly CatalogEffect[] = EFFECTS_60B.map((e) => ({
   ...e,
   category: GROUP_TO_CATEGORY[e.group] ?? null,
-  nameVerified: e.minFirmware <= 1,
 }))
 
 const BY_ID = new Map(CATALOG.map((e) => [e.id, e]))

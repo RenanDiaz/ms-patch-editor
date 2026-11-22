@@ -265,7 +265,6 @@ export function EditorPage({ initial, sourceLabel, pedal, liveDefault = true }: 
               <div>
                 <h2>
                   {sel + 1}. {def?.name ?? 'Desconocido'}
-                  {def && !def.nameVerified && <span className="tag">fw2 · nombre sin verificar con manual</span>}
                 </h2>
                 <div className="muted">
                   {def?.category ?? '—'} · DSP ~{(dspShare(block.effectId) * 100).toFixed(0)}% · {block.on ? 'activo' : 'bypass'}

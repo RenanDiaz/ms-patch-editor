@@ -44,7 +44,6 @@ export function TypePicker({ title, firmware, current, onPick, onClose }: Props)
           <li key={e.id}>
             <button className={e.id === current ? 'current' : ''} onClick={() => onPick(e.id)}>
               <span className="pname">{e.name}</span>
-              {!e.nameVerified && <span className="tag" title="Efecto de firmware 2: el nombre viene de g200kg, no del manual">fw2 · sin verificar</span>}
               <span className="pdsp">{(100 / e.dsp).toFixed(0)}%</span>
             </button>
           </li>
