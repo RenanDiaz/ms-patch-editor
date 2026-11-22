@@ -111,6 +111,12 @@ describe('effect search', () => {
     expect(names('ba chorus')[0]).toBe('Ba Chorus')
   })
 
+  it('the name as typed wins: "D.I" picks D.I Plus before DirtyGate (found in a real test)', () => {
+    expect(names('D.I')[0]).toBe('D.I Plus')
+    expect(names('d.i plus')[0]).toBe('D.I Plus')
+    expect(names('svt')[0]).toBe('SVT')
+  })
+
   it('every word must match; nothing found returns an empty list', () => {
     expect(names('zzzz')).toEqual([])
     expect(names('delay comp')).toEqual([])

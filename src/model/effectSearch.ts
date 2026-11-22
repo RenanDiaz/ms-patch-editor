@@ -8,13 +8,16 @@ export const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
  * Effect search (spec §13): matches the pedal's name, `fullName`, `reference`
  * and `aliases` from `effectInfo()`, and the category (the manual's code, e.g.
  * "DLY/REV", and g200kg's group, e.g. "DELAY"). Never the description.
- * Every word of the query must match some field. Results are ranked: name
- * starts with the query, name contains it, other texts, category only.
+ * Every word of the query must match some field. Results are ranked: exact
+ * name, name starting with the query as typed (punctuation included, so
+ * "D.I" finds "D.I Plus" before "DirtyGate"), name starts with it, name
+ * contains it, other texts, category only.
  */
 export function searchEffects(list: readonly CatalogEffect[], query: string): CatalogEffect[] {
   const words = query.split(/\s+/).map(norm).filter(Boolean)
   if (!words.length) return [...list]
   const whole = norm(query)
+  const typed = query.trim().toLowerCase()
   const scored: { e: CatalogEffect; rank: number; i: number }[] = []
   list.forEach((e, i) => {
     const info = effectInfo(e.id)
@@ -25,7 +28,12 @@ export function searchEffects(list: readonly CatalogEffect[], query: string): Ca
     const catParts = (e.category ?? '').split('/').map(norm)
     const fields = [name, ...texts, ...cats, ...catParts]
     if (!words.every((w) => fields.some((f) => f.includes(w)))) return
-    const rank = name.startsWith(whole)
+    const raw = e.name.toLowerCase()
+    const rank = raw === typed || name === whole
+      ? -2
+      : raw.startsWith(typed)
+        ? -1
+        : name.startsWith(whole)
       ? 0
       : name.includes(whole)
         ? 1

@@ -53,7 +53,7 @@ describe('patch operations', () => {
     expect(removeBlock({ name: 'x', blocks: [newBlock(byName('SVT'))] }, 0).blocks.map((b) => b.effectId)).toEqual([THRU_ID])
     const off = toggleBlock(p0, 0)
     const changed = changeType(setParam(off, 0, 0, 1), 0, byName('OptComp'))
-    expect(changed.blocks[0]).toEqual({ ...newBlock(byName('OptComp')), on: false })
+    expect(changed.blocks[0]).toEqual(newBlock(byName('OptComp'))) // a new effect arrives ON, even over a bypassed block
   })
   it('does not mutate its input', () => {
     const before = JSON.stringify(p0)

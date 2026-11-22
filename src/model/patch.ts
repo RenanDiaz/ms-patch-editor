@@ -89,9 +89,13 @@ export function removeBlock(p: Patch, i: number): Patch {
   return withBlocks(p, blocks.length ? blocks : [newBlock(THRU_ID)])
 }
 
-/** Changes a block's type; parameters reset to the new type's defaults, ON/OFF is kept. */
+/**
+ * Changes a block's effect; parameters reset to the new effect's defaults and
+ * the block is switched ON (keeping a previous bypass made the new effect seem
+ * silent: found in a real test, 2026-11-22).
+ */
 export function changeType(p: Patch, i: number, effectId: number): Patch {
-  return withBlocks(p, p.blocks.map((b, k) => (k === i ? { ...newBlock(effectId), on: b.on } : b)))
+  return withBlocks(p, p.blocks.map((b, k) => (k === i ? newBlock(effectId) : b)))
 }
 
 export function setParam(p: Patch, i: number, param: number, value: number): Patch {
