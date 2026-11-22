@@ -102,6 +102,19 @@ describe('keyboard shortcuts', () => {
   })
 })
 
+describe('patch name limit', () => {
+  it('a full name field refuses more keys and says why (found in a real test)', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'FAKE Clean' }))
+    const input = screen.getByRole('textbox', { name: 'Patch name' }) as HTMLInputElement
+    expect(input.maxLength).toBe(10)
+    fireEvent.change(input, { target: { value: 'NanchoBass' } })
+    input.setSelectionRange(10, 10)
+    fireEvent.keyDown(input, { key: 's' })
+    expect(screen.getByText(/The pedal allows 10 characters: “s” was not added/)).toBeInTheDocument()
+  })
+})
+
 describe('effect picker', () => {
   const pick = (dsp = 0) => {
     const onPick = vi.fn()

@@ -94,18 +94,35 @@ export function PatchName({ name, onRename }: { name: string; onRename: (n: stri
         autoFocus
         onFocus={(e) => e.target.select()}
         value={draft}
+        maxLength={NAME_MAX}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') commit()
+          else if (e.key === 'Escape') setEditing(false)
+          else {
+            // Full field: say so instead of dropping the key silently (found in a real test).
+            const t = e.currentTarget
+            const selected = (t.selectionEnd ?? 0) - (t.selectionStart ?? 0)
+            if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && selected === 0 && [...t.value].length >= NAME_MAX) {
+              setRejected(`The pedal allows ${NAME_MAX} characters: “${e.key}” was not added`)
+            }
+          }
+        }}
+        onPaste={(e) => {
+          const t = e.currentTarget
+          const pasted = [...e.clipboardData.getData('text')]
+          const keep = [...t.value].length - ((t.selectionEnd ?? 0) - (t.selectionStart ?? 0))
+          if (keep + pasted.length > NAME_MAX) setRejected(`The pedal allows ${NAME_MAX} characters: the rest of the pasted text was cut`)
+        }}
         onChange={(e) => {
           const chars = [...e.target.value]
           const bad = chars.filter((c) => !isNameChar(c))
           const ok = chars.filter(isNameChar)
-          setRejected(bad.length ? `“${bad.join('')}” is not available on the pedal` : ok.length > NAME_MAX ? 'The pedal allows 10 characters' : null)
+          setRejected((prev) =>
+            bad.length ? `“${bad.join('')}” is not available on the pedal` : ok.length > NAME_MAX ? `The pedal allows ${NAME_MAX} characters` : ok.length >= NAME_MAX ? prev : null,
+          )
           setDraft(ok.slice(0, NAME_MAX).join(''))
         }}
         onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') commit()
-          else if (e.key === 'Escape') setEditing(false)
-        }}
       />
       <span className="pname-hint" id="pname-hint" role="status">
         <b className={len >= NAME_MAX ? 'full' : ''}>

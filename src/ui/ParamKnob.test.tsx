@@ -25,15 +25,15 @@ describe('paramControl', () => {
 })
 
 describe('ParamKnob', () => {
-  it('double-click on the value lets you type it; Enter applies, Escape cancels', () => {
+  it('one click on the value lets you type it (found hard to discover in a real test); Enter applies, Escape cancels', () => {
     const onChange = vi.fn()
     render(<ParamKnob def={param('D Comp', 'Level')} raw={100} firmware={FW} onChange={onChange} />)
-    fireEvent.doubleClick(screen.getByText('100'))
+    fireEvent.click(screen.getByRole('button', { name: /Level: 100\. Click to type a value/ }))
     const input = screen.getByRole('textbox', { name: /type a value/ })
     fireEvent.change(input, { target: { value: '120' } })
     fireEvent.keyDown(input, { key: 'Enter' })
     expect(onChange).toHaveBeenCalledWith(120)
-    fireEvent.doubleClick(screen.getByText('100'))
+    fireEvent.click(screen.getByText('100'))
     fireEvent.change(screen.getByRole('textbox', { name: /type a value/ }), { target: { value: '5' } })
     fireEvent.keyDown(screen.getByRole('textbox', { name: /type a value/ }), { key: 'Escape' })
     expect(onChange).toHaveBeenCalledTimes(1)

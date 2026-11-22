@@ -174,6 +174,8 @@
 .knob-pointer { stroke: var(--text); stroke-width: 5; stroke-linecap: round; }
 .param.changed .knob-arc, .param.changed .knob-pointer { stroke: var(--dirty); }
 .param-value { font: 700 38px/1 var(--big); font-variant-numeric: tabular-nums; cursor: text; min-height: 38px; white-space: nowrap; }
+.editor button.param-value-edit { background: none; border: 0; border-bottom: 2px dotted transparent; border-radius: 0; padding: 0 2px; color: inherit; }
+.editor button.param-value-edit:hover, .editor button.param-value-edit:focus-visible { border-bottom-color: currentColor; }
 .param.changed .param-value { color: var(--dirty); }
 .editor .param-input { width: 5ch; font: 700 32px/1 var(--big); text-align: center; background: var(--base); color: var(--text); border: 2px solid var(--select); border-radius: 6px; }
 .param-was { font-size: 13px; color: var(--muted); min-height: 18px; }

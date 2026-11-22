@@ -199,9 +199,15 @@ export function ParamKnob({ def, raw, firmware, device, onChange }: Props) {
           }}
         />
       ) : (
-        <div className="param-value" title="Double-click to type a value" onDoubleClick={() => setTyping(label)}>
+        <button
+          type="button"
+          className="param-value param-value-edit"
+          title="Click to type a value"
+          aria-label={`${def.name}: ${label}. Click to type a value`}
+          onClick={() => setTyping(label)}
+        >
           {label}
-        </div>
+        </button>
       )}
       {was}
       <div className="param-range">
