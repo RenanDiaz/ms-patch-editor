@@ -136,6 +136,13 @@ Todos sin escrituras, salvo S3, que usa un patch de prueba respaldado antes.
 - **Por aclarar con el usuario antes de diseñar:** qué se sincroniza y con qué (otro dispositivo o software MIDI, otro pedal, la app en otra computadora), en qué dirección, y si los cambios deben guardarse o solo escucharse.
 - **Reglas que aplican:** cualquier envío al pedal pasa por `withApprovedWrites()`; solo Guardar deja un cambio permanente (CLAUDE.md, reglas 1 y 3).
 
+### P3: Dirección de THRSH y Bal (prueba de oído pendiente)
+- **Por qué:** el reporte de Nancho Bass (2026-11-22) pidió saber hacia dónde va cada parámetro, y la lista oficial de Zoom solo dice qué controla (`docs/param-info-sources.md`).
+- **Prueba 1, THRSH (M Comp):** M Comp solo, Ratio 10, ATTCK 1, Level 100. Comparar THRSH 0 y 50 tocando notas fuertes y suaves: ¿en cuál comprime más?
+- **Prueba 2, Bal (Ba Squeak):** Ba Squeak solo, Gain 100, Level 100. Comparar Bal 0 y 100: ¿en cuál suena limpio?
+- **Cómo:** en la ranura 33 con escucha en vivo y sin guardar (Revert al final), o el usuario mueve las perillas y la app solo lee. Escribir en el pedal requiere la aprobación del usuario.
+- **Registro:** actualizar `help` de esos parámetros en `src/model/paramInfo.ts` con la fuente "prueba de oído del usuario" y la fecha, solo para los efectos probados.
+
 ## 13. Rediseño (decisiones del usuario, 2026-11-22)
 
 - **Dirección visual:** A "Escenario" (`docs/design/direcciones/a-escenario.html`) como base, con dos ideas de B "Banco de trabajo": la lista de cambios frente al pedal con deshacer por cambio, y la cadena de cada patch como cuadritos de color en la lista de patches. Insumos: `docs/design/auditoria-2026-11-22.md` y `docs/ux/usuario-real-2026-11-22.md`.
