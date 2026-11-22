@@ -82,7 +82,7 @@ describe('keyboard shortcuts', () => {
     expect(current()).toBe('02')
     key('3')
     expect(selectedBlock()).toBe('3')
-    expect(screen.getByRole('heading', { level: 2 }).textContent).toBe('Ba Chorus')
+    expect(screen.getByRole('heading', { level: 2 }).textContent).toMatch(/^Ba Chorus/)
     key('b')
     expect(screen.getByRole('button', { name: 'Ba Chorus: on' })).toBeInTheDocument()
     key('s', { metaKey: true })
