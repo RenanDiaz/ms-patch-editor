@@ -135,3 +135,11 @@ Todos sin escrituras, salvo S3, que usa un patch de prueba respaldado antes.
 - **Idea (usuario, 2026-11-22):** sincronizar cambios de efectos o patches por MIDI a través de la app con el pedal conectado.
 - **Por aclarar con el usuario antes de diseñar:** qué se sincroniza y con qué (otro dispositivo o software MIDI, otro pedal, la app en otra computadora), en qué dirección, y si los cambios deben guardarse o solo escucharse.
 - **Reglas que aplican:** cualquier envío al pedal pasa por `withApprovedWrites()`; solo Guardar deja un cambio permanente (CLAUDE.md, reglas 1 y 3).
+
+## 13. Rediseño (decisiones del usuario, 2026-11-22)
+
+- **Dirección visual:** A "Escenario" (`docs/design/direcciones/a-escenario.html`) como base, con dos ideas de B "Banco de trabajo": la lista de cambios frente al pedal con deshacer por cambio, y la cadena de cada patch como cuadritos de color en la lista de patches. Insumos: `docs/design/auditoria-2026-11-22.md` y `docs/ux/usuario-real-2026-11-22.md`.
+- **Idioma de la interfaz: inglés**, toda. La documentación del proyecto sigue en español.
+- **Textos auxiliares por efecto** (`src/model/effectInfo.ts`): nombre completo sin abreviar, referencia real (el equipo que modela, sobre todo amps y gabinetes) y una descripción corta. Fuente: la lista oficial de Zoom Ver.2 y g200kg; nada de memoria (regla 4). Las descripciones se redactan con palabras propias.
+- **Búsqueda de efectos:** coincide con el nombre del pedal, el nombre completo, la referencia, alias (p. ej. "delay" encuentra AnalogDly) y la categoría. **No** busca en la descripción. Enter elige el primer resultado.
+- **Categorías:** las del manual (DYN/FLTR, OD/DIST, AMP, MOD/SFX, DLY/REV), no nombres inventados.
