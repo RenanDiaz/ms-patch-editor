@@ -299,3 +299,12 @@ El usuario renombró el patch 33 en el propio pedal, en tres rondas, con todos l
 3. `{}~`
 
 Según el usuario, el editor del pedal recorre los caracteres en este orden y luego vuelve a empezar: espacio, esos 23 símbolos, A-Z, a-z, 0-9. Las letras son solo las del alfabeto inglés (sin ñ ni acentos). **No ofrece** `"` `*` `/` `:` `<` `>` `?` `\` `|`. La app solo acepta esos caracteres en los nombres (`isNameChar`, `src/model/patch.ts`).
+
+### 9.7 Respaldo y restauración del banco desde el editor (2026-11-22)
+
+Prueba aprobada por el usuario, ejecutada por Claude en su Chrome con el editor real (`/`), solo en la ranura 33:
+
+1. **Respaldar banco** (archivo A): sin mensajes de escritura. A coincide con la captura de S1 salvo las ranuras 20 y 26 (cambiadas por el usuario).
+2. **Restaurar banco** con B = A con la ranura 33 reemplazada por una copia de "Octaver". El diálogo listó solo "33 Empty → Octaver". Escrituras: `C0 20`, `0x28`, `0x32` (ranura 33); relectura `C0 21`, `C0 20`, `0x29`. Resultado: "1 de 1 ranuras restauradas y verificadas".
+3. **Restaurar banco** con A: el diálogo listó solo "33 Octaver → Empty"; mismos mensajes; verificada.
+4. **Respaldar banco** de nuevo: idéntico a A en las 50 ranuras.
