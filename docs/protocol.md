@@ -321,3 +321,7 @@ Prueba aprobada por el usuario, ejecutada por Claude en su Chrome con el editor 
 | Cambiar el efecto 1 por RackComp y el 3 por SuperB (firmware 2, AMP) | 2 × `0x28` | verificado |
 
 Ningún paso marcó diferencias en la relectura, y la relectura periódica del buffer no detectó cambios inesperados. Esto confirma con el pedal el codificador para cambios de cadena, ranuras vacías, maxFx y la escritura de un AMP de firmware 2. Al final, la ranura 33 se restauró con "Restaurar banco" (verificada).
+
+### 9.9 Mismo efecto dos veces en un patch (2026-11-22)
+
+Prueba aprobada por el usuario en la ranura 33, con el editor y escucha en vivo: Delay en el bloque 1, copiado y pegado después (Delay · Delay). En vivo se enviaron dos `0x28`; Guardar (`0x28` + `0x32`) se verificó byte por byte, y la relectura del buffer no mostró cambios después. El pedal mostró los dos Delay encendidos y el usuario confirmó que suenan ambos. Conclusión: un patch puede tener el mismo efecto en más de una ranura. La 33 se restauró a "Empty" con "Restaurar banco" (verificada).
