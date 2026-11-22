@@ -125,6 +125,7 @@
 .restore-list { list-style: none; padding: 0; margin: 8px 0; max-height: 40vh; overflow: auto; font-family: var(--mono); font-size: 13px; }
 .restore-list li { padding: 2px 0; }
 .restore-list .num { color: var(--e-muted); }
+.restore-list .chain { color: var(--e-muted); font-size: 12px; }
 .editor .linklike { background: none; border: 0; padding: 0; color: var(--e-accent); text-decoration: underline; cursor: pointer; }
 .confirm .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
 

@@ -105,6 +105,12 @@ export function BankRestoreDialog({ fileName, items, warning, blocked, onRun, on
                 <label>
                   <input type="checkbox" checked={chosen.has(i.slot)} onChange={() => toggle(i.slot)} disabled={running} />{' '}
                   <span className="num">{num(i.slot)}</span> {i.now} → <strong>{i.backup}</strong>
+                  {(i.now === i.backup || i.nowChain !== i.backupChain) && (
+                    <span className="chain">
+                      {' '}
+                      ({i.nowChain} → {i.backupChain})
+                    </span>
+                  )}
                 </label>
               </li>
             ))}

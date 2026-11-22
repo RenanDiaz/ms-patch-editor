@@ -29,7 +29,9 @@ describe('backup file', () => {
     const now = cap.patches.map(bytes)
     const backup = now.map((p) => p.slice())
     backup[32] = now[6]
-    expect(restorePlan(now, backup)).toEqual([{ slot: 32, now: 'Empty', backup: 'Octaver' }])
+    expect(restorePlan(now, backup)).toEqual([
+      { slot: 32, now: 'Empty', backup: 'Octaver', nowChain: 'THRU', backupChain: expect.stringContaining(' · ') },
+    ])
     expect(restorePlan(now, now)).toEqual([])
   })
 })

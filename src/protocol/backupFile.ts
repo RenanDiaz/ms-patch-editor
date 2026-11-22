@@ -4,6 +4,7 @@
  */
 import type { IdentityReply } from './messages'
 import { PATCH_SLOTS } from './messages'
+import { findEffect } from './describe'
 import { decodePatch60B } from './patch60b'
 
 export const BACKUP_FORMAT = 'ms60b-capture/1'
@@ -62,6 +63,17 @@ export interface RestoreItem {
   now: string
   /** Name in the backup. */
   backup: string
+  /** Effect chains, e.g. "RackComp · OptComp · SuperB", to tell apart slots with the same name. */
+  nowChain: string
+  backupChain: string
+}
+
+const chain = (b: ArrayLike<number>) => {
+  const d = decodePatch60B(b)
+  return d.effects
+    .slice(0, Math.max(1, d.maxFx))
+    .map((e) => findEffect(e.id)?.name ?? '?')
+    .join(' · ')
 }
 
 /** Slots whose bytes differ between what the pedal holds and the backup. */
@@ -70,6 +82,6 @@ export function restorePlan(current: readonly (ArrayLike<number> | null)[], back
     const c = current[slot]
     const same = !!c && c.length === b.length && Array.from(b).every((v, i) => v === c[i])
     if (same) return []
-    return [{ slot, now: c ? decodePatch60B(c).name : '?', backup: decodePatch60B(b).name }]
+    return [{ slot, now: c ? decodePatch60B(c).name : '?', backup: decodePatch60B(b).name, nowChain: c ? chain(c) : '?', backupChain: chain(b) }]
   })
 }

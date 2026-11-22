@@ -308,3 +308,16 @@ Prueba aprobada por el usuario, ejecutada por Claude en su Chrome con el editor 
 2. **Restaurar banco** con B = A con la ranura 33 reemplazada por una copia de "Octaver". El diálogo listó solo "33 Empty → Octaver". Escrituras: `C0 20`, `0x28`, `0x32` (ranura 33); relectura `C0 21`, `C0 20`, `0x29`. Resultado: "1 de 1 ranuras restauradas y verificadas".
 3. **Restaurar banco** con A: el diálogo listó solo "33 Octaver → Empty"; mismos mensajes; verificada.
 4. **Respaldar banco** de nuevo: idéntico a A en las 50 ranuras.
+
+### 9.8 Cambios de cadena con el pedal (2026-11-22)
+
+Prueba aprobada por el usuario, ejecutada por Claude en su Chrome con el editor real y escucha en vivo, solo en la ranura 33 ("Empty", un THRU). Después de cada paso se pulsó Guardar, que escribe (`0x28` + `0x32`), relee la ranura y compara byte por byte con lo escrito:
+
+| Paso | Envío en vivo | Guardar |
+|---|---|---|
+| Cambiar THRU por OptComp; agregar BassDrive, SVT y Delay | 4 × `0x28` | verificado |
+| Mover OptComp dos posiciones a la derecha (BassDrive · SVT · OptComp · Delay) | 2 × `0x28` | verificado |
+| Quitar SVT (3 efectos) | 1 × `0x28` | verificado |
+| Cambiar el efecto 1 por RackComp y el 3 por SuperB (firmware 2, AMP) | 2 × `0x28` | verificado |
+
+Ningún paso marcó diferencias en la relectura, y la relectura periódica del buffer no detectó cambios inesperados. Esto confirma con el pedal el codificador para cambios de cadena, ranuras vacías, maxFx y la escritura de un AMP de firmware 2. Al final, la ranura 33 se restauró con "Restaurar banco" (verificada).
