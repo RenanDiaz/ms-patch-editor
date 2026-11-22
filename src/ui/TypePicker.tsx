@@ -24,10 +24,12 @@ export function TypePicker({ title, firmware, current, dspUsedByOthers, onPick, 
   const [cat, setCat] = useState<Category>(() => all.find((e) => e.id === current)?.category ?? CATEGORIES[0])
   const [query, setQuery] = useState('')
   const ref = useRef<HTMLDialogElement>(null)
+  const search = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const d = ref.current
     if (d && !d.open) d.showModal?.()
+    search.current?.focus() // showModal focuses the first button otherwise
   }, [])
 
   const q = query.trim()
@@ -43,9 +45,10 @@ export function TypePicker({ title, firmware, current, dspUsedByOthers, onPick, 
         </button>
       </header>
       <input
+        ref={search}
         className="picker-search"
-        autoFocus
-        type="search"
+        type="text"
+        role="searchbox"
         placeholder="Search by name, model or category (e.g. delay, SVT, comp)"
         value={query}
         onChange={(e) => setQuery(e.target.value)}

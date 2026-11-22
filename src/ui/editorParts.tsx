@@ -12,6 +12,7 @@ export function Modal(props: { className?: string; labelledBy: string; onCancel:
   useEffect(() => {
     const d = ref.current
     if (d && !d.open) d.showModal?.()
+    d?.querySelector<HTMLElement>('[data-autofocus]')?.focus() // showModal focuses the first button otherwise
   }, [])
   return (
     <dialog
@@ -187,7 +188,7 @@ export function SwitchDialog(props: {
           Save and open {pad2(props.toNum)}
         </button>
         <button onClick={() => props.onChoice('discard')}>Revert and open {pad2(props.toNum)}</button>
-        <button className="ghost" onClick={() => props.onChoice('cancel')}>
+        <button className="ghost" data-autofocus onClick={() => props.onChoice('cancel')}>
           Keep editing
         </button>
       </div>
@@ -204,7 +205,7 @@ export function ConfirmDialog(props: { title: string; children: ReactNode; confi
         <button className="danger" onClick={props.onConfirm}>
           {props.confirm}
         </button>
-        <button className="ghost" autoFocus onClick={props.onCancel}>
+        <button className="ghost" data-autofocus onClick={props.onCancel}>
           Cancel
         </button>
       </div>

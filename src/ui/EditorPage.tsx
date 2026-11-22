@@ -293,7 +293,7 @@ export function EditorPage({ initial, pedal, liveDefault = true }: Props) {
                 ? { kind: 'quiet', text: 'Live: edits play on the pedal right away. Leaving a patch without saving puts its original back.' }
                 : pedal
                   ? { kind: 'quiet', text: 'Live is off: the pedal plays its saved patch. Your edits reach it when you save.' }
-                  : { kind: 'quiet', text: 'Demo with fake data: nothing is sent to a pedal.' }
+                  : { kind: 'quiet', text: 'Nothing here reaches a pedal: Save only updates this page. Connect the pedal from the start page.' }
 
   const sameAsPedal = pedalAt === state.current
   const blockChanges = changes.filter((c) => (c.kind === 'param' || c.kind === 'bypass') && c.block === sel).length

@@ -47,3 +47,12 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## Fonts (SIL Open Font License 1.1)
+
+Bundled through the `@fontsource` npm packages and served with the app (no font CDN).
+
+- **Big Shoulders Display** (`@fontsource/big-shoulders-display`), © Google Inc. and the Big Shoulders project authors. SIL OFL 1.1.
+- **Atkinson Hyperlegible** (`@fontsource/atkinson-hyperlegible`), © 2020 Braille Institute of America, Inc. SIL OFL 1.1.
+
+Full license text: `node_modules/@fontsource/*/LICENSE`, or https://openfontlicense.org/open-font-license-official-text/.
