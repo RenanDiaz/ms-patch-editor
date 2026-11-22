@@ -1,102 +1,110 @@
-import { useEffect, useReducer, useRef, useState, type DragEvent } from 'react'
-import { bankReducer, isDirty, type BankState } from '../model/bank'
+import { useEffect, useMemo, useReducer, useRef, useState, type CSSProperties, type DragEvent } from 'react'
+import { bankReducer, canRedo, canUndo, isDirty, type BankState } from '../model/bank'
 import { dspShare, getEffect, THRU_ID } from '../model/catalog'
+import { deviceBlockFor, diffPatch, effectName, undoChange, type Change } from '../model/changes'
+import { effectInfo } from '../model/effectInfo'
+import { patchFromDevice } from '../model/fromDevice'
 import {
   addBlock,
   canSave,
   changeType,
+  copyBlock,
   dspTotal,
   MAX_BLOCKS,
   moveBlock,
-  NAME_MAX,
-  isNameChar,
-  copyBlock,
   pasteInsert,
   pasteReplace,
-  type Block,
   removeBlock,
   rename,
   setParam,
   toggleBlock,
+  type Block,
   type Patch,
 } from '../model/patch'
 import { BackupFileError, parseBackupJson, restorePlan, toBackupJson, type BankBackup, type RestoreItem } from '../protocol/backupFile'
 import type { PedalSession } from '../protocol/pedalSession'
 import { BankRestoreDialog } from './BankRestoreDialog'
+import { categoryVar } from './categoryColor'
+import { changeLine, pad2 } from './changeText'
+import {
+  ChainSquares,
+  ClipboardBar,
+  ConfirmDialog,
+  ConflictDialog,
+  PatchName,
+  PendingRestoreDialog,
+  SwitchDialog,
+} from './editorParts'
 import { ParamKnob } from './ParamKnob'
-import { usePedalSync } from './usePedalSync'
+import { paramScale } from './paramControl'
 import { TypePicker } from './TypePicker'
+import { usePedalSync } from './usePedalSync'
+import '@fontsource/big-shoulders-display/600'
+import '@fontsource/big-shoulders-display/700'
+import '@fontsource/big-shoulders-display/800'
+import '@fontsource/atkinson-hyperlegible/400'
+import '@fontsource/atkinson-hyperlegible/700'
 import './EditorPage.css'
 
 type Picker = { mode: 'add' } | { mode: 'change'; index: number } | null
 
 interface Props {
   initial: () => BankState
-  /** Shown in the header, e.g. "DATOS FALSOS". */
-  sourceLabel: string
-  /** Real pedal. Absent = fake data. */
+  /** Real pedal. Absent = demo with fake data. */
   pedal?: PedalSession
   /** Live listening starts on (real pedal only). */
   liveDefault?: boolean
 }
 
-export function EditorPage({ initial, sourceLabel, pedal, liveDefault = true }: Props) {
+const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)
+const MOD = isMac ? '⌘' : 'Ctrl+'
+/** Key values shown on each block of the chain. */
+const KEY_VALUES = 3
+const NOTICE_MS = 4000
+
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
+
+export function EditorPage({ initial, pedal, liveDefault = true }: Props) {
   const [state, dispatch] = useReducer(bankReducer, undefined, initial)
   const [live, setLive] = useState(!!pedal && liveDefault)
   const sync = usePedalSync(pedal, state, dispatch, live)
   const [picker, setPicker] = useState<Picker>(null)
   const [clip, setClip] = useState<{ block: Block; from: string } | null>(null)
+  const [clipBar, setClipBar] = useState(false)
   const [restore, setRestore] = useState<{ fileName: string; backup: BankBackup; items: RestoreItem[] } | null>(null)
   const [bankMsg, setBankMsg] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [confirmRevert, setConfirmRevert] = useState(false)
+  const [bankOpen, setBankOpen] = useState(false)
   const restoreInput = useRef<HTMLInputElement>(null)
-
-  const download = (name: string, text: string) => {
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }))
-    a.download = name
-    a.click()
-    URL.revokeObjectURL(a.href)
-  }
-  const stamp = () => new Date().toISOString().replace(/[:.]/g, '-')
-
-  /** Re-reads the bank from the pedal and downloads it as a backup file. */
-  const backupNow = async () => {
-    setBankMsg(null)
-    try {
-      const cap = await sync.backupBank()
-      if (!cap) return
-      download(`ms60b-backup-${stamp()}.json`, toBackupJson(cap, 'MS-60B bank backup (MS-60B Edit).'))
-      setBankMsg('Respaldo descargado.')
-    } catch (e) {
-      setBankMsg((e as Error).message)
-    }
-  }
-
-  /** Reads the file, re-reads the pedal, and opens the restore dialog with the slots that differ. */
-  const openRestore = async (file: File) => {
-    setBankMsg(null)
-    try {
-      const backup = parseBackupJson(await file.text())
-      const cap = await sync.backupBank()
-      if (!cap) return
-      setRestore({ fileName: file.name, backup, items: restorePlan(cap.patches, backup.patches) })
-    } catch (e) {
-      setBankMsg(e instanceof BackupFileError ? `Archivo de respaldo: ${e.message}` : (e as Error).message)
-    }
-  }
+  const changesRef = useRef<HTMLElement>(null)
   const dragFrom = useRef<number | null>(null)
   const [dropAt, setDropAt] = useState<number | null>(null)
 
   const slot = state.slots[state.current]
   const patch = slot.working
   const dirty = isDirty(slot)
-  const dspCheck = canSave(patch)
-  const check = dspCheck
+  const changes = useMemo(() => diffPatch(slot.device, slot.working), [slot.device, slot.working])
+  const changeCount = dirty ? Math.max(changes.length, 1) : 0
+  const check = canSave(patch)
   const total = dspTotal(patch)
   const sel = Math.min(state.selectedBlock, patch.blocks.length - 1)
   const block = patch.blocks[sel]
   const def = getEffect(block.effectId)
+  const info = effectInfo(block.effectId)
+  const devBlock = deviceBlockFor(slot.device, patch, sel)
   const dirtyCount = state.slots.filter(isDirty).length
+  const num = pad2(state.current + 1)
+  const busy = !!sync.busy
+
+  // ---- notices ----
+  const noticeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const flash = (text: string) => {
+    clearTimeout(noticeTimer.current)
+    setNotice(text)
+    noticeTimer.current = setTimeout(() => setNotice(null), NOTICE_MS)
+  }
+  useEffect(() => () => clearTimeout(noticeTimer.current), [])
 
   // Warn before closing the tab with unsaved changes (no auto-save, spec §3).
   useEffect(() => {
@@ -107,36 +115,140 @@ export function EditorPage({ initial, sourceLabel, pedal, liveDefault = true }: 
     return () => window.removeEventListener('beforeunload', h)
   }, [dirtyCount])
 
-  const edit = (fn: (p: Patch) => Patch, selectBlock?: number) => dispatch({ type: 'edit', fn, selectBlock })
+  // The paste bar shows again on another patch (it hides after each paste).
+  useEffect(() => {
+    if (clip) setClipBar(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.current])
 
-  // Copy / paste of a block (spec §12, P1). Local edits like any other: live
-  // listening sends them, Save makes them permanent.
+  // Keep the open patch visible in the list (keyboard ↑/↓, following the pedal).
+  const listRef = useRef<HTMLOListElement>(null)
+  useEffect(() => {
+    listRef.current?.querySelector('[aria-current="true"]')?.scrollIntoView?.({ block: 'nearest' })
+  }, [state.current])
+
+  // ---- edits ----
+  const edit = (fn: (p: Patch) => Patch, selectBlock?: number, merge?: string) =>
+    dispatch({ type: 'edit', fn, selectBlock, merge, at: merge ? Date.now() : undefined })
+
   const copyAt = (i: number) => {
     const b = patch.blocks[i]
     if (!b || b.effectId === THRU_ID) return
-    setClip({ block: copyBlock(b), from: `bloque ${i + 1} de ${String(state.current + 1).padStart(2, '0')} ${patch.name}` })
+    setClip({ block: copyBlock(b), from: `block ${i + 1} of ${num} ${patch.name}` })
+    setClipBar(true)
+    flash(`Copied ${effectName(b.effectId)}. Open any patch and paste with ${MOD}V.`)
   }
-  const pasteOver = (i: number) => clip && edit((p) => pasteReplace(p, i, clip.block), i)
-  const pasteAt = (at: number) =>
-    clip && edit((p) => pasteInsert(p, at, clip.block), Math.min(at, MAX_BLOCKS - 1))
+  const pasteOver = (i: number) => {
+    if (!clip) return
+    edit((p) => pasteReplace(p, i, clip.block), i)
+    setClipBar(false)
+  }
+  const pasteAt = (at: number) => {
+    if (!clip) return
+    edit((p) => pasteInsert(p, at, clip.block), Math.min(at, MAX_BLOCKS - 1))
+    setClipBar(false)
+  }
 
-  const shortcuts = useRef({ copyAt, pasteOver, pasteAt, sel: 0, len: 0 })
+  const doSave = async () => {
+    if (!dirty || !check.ok || busy) return
+    const at = state.current
+    const ok = await sync.save()
+    if (ok) flash(`Saved to ${pad2(at + 1)} ✓`)
+  }
+  const doRevert = async () => {
+    setConfirmRevert(false)
+    const at = state.current
+    await sync.revert()
+    flash(`Reverted ${pad2(at + 1)} to the pedal's version. ${MOD}Z brings your changes back.`)
+  }
+  const askRevert = () => {
+    if (!dirty || busy) return
+    if (changeCount > 1) setConfirmRevert(true)
+    else void doRevert()
+  }
+  const undo = () => !busy && dispatch({ type: 'undo' })
+  const redo = () => !busy && dispatch({ type: 'redo' })
+  const undoOne = (c: Change) => edit((p) => undoChange(p, slot.device, c))
+
+  // ---- bank (backup / restore) ----
+  const download = (name: string, text: string) => {
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }))
+    a.download = name
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }
+  const stamp = () => new Date().toISOString().replace(/[:.]/g, '-')
+  const backupNow = async () => {
+    setBankOpen(false)
+    setBankMsg(null)
+    try {
+      const cap = await sync.backupBank()
+      if (!cap) return
+      download(`ms60b-backup-${stamp()}.json`, toBackupJson(cap, 'MS-60B bank backup (MS-60B Edit).'))
+      setBankMsg('Backup downloaded: all 50 patches.')
+    } catch (e) {
+      setBankMsg((e as Error).message)
+    }
+  }
+  const openRestore = async (file: File) => {
+    setBankMsg(null)
+    try {
+      const backup = parseBackupJson(await file.text())
+      const cap = await sync.backupBank()
+      if (!cap) return
+      setRestore({ fileName: file.name, backup, items: restorePlan(cap.patches, backup.patches) })
+    } catch (e) {
+      setBankMsg(e instanceof BackupFileError ? `Backup file: ${e.message}.` : (e as Error).message)
+    }
+  }
+
+  // ---- keyboard shortcuts ----
+  const keys = useRef({
+    save: doSave, undo, redo, askRevert, copyAt, pasteOver, pasteAt,
+    sel, len: patch.blocks.length, current: state.current, slots: state.slots.length,
+    toggle: (_i: number) => {},
+    selectPatch: (_i: number) => {},
+    selectBlock: (_i: number) => {},
+  })
   useEffect(() => {
-    shortcuts.current = { copyAt, pasteOver, pasteAt, sel, len: patch.blocks.length }
+    keys.current = {
+      save: doSave, undo, redo, askRevert, copyAt, pasteOver, pasteAt,
+      sel, len: patch.blocks.length, current: state.current, slots: state.slots.length,
+      toggle: (i) => edit((p) => toggleBlock(p, i), i),
+      selectPatch: (i) => dispatch({ type: 'selectPatch', index: i }),
+      selectBlock: (i) => dispatch({ type: 'selectBlock', index: i }),
+    }
   })
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey) || e.altKey) return
-      const t = e.target
-      if (t instanceof Element && t.closest('input, textarea, select, dialog, [contenteditable="true"]')) return
-      if (window.getSelection()?.toString()) return // copying text on the page
+      if (document.querySelector('dialog[open]')) return
+      const t = e.target instanceof Element ? e.target : null
+      const inField = !!t?.closest('input, textarea, select, [contenteditable="true"]')
       const k = e.key.toLowerCase()
-      const s = shortcuts.current
-      if (k === 'c') s.copyAt(s.sel)
-      else if (k === 'v' && e.shiftKey) {
-        if (s.sel + 1 < MAX_BLOCKS || s.len < MAX_BLOCKS) s.pasteAt(s.sel + 1)
+      const s = keys.current
+      if ((e.metaKey || e.ctrlKey) && !e.altKey) {
+        if (k === 's') s.save()
+        else if (inField) return
+        else if (k === 'z' && e.shiftKey) s.redo()
+        else if (k === 'z' || (k === 'y' && !isMac)) (k === 'y' ? s.redo : s.undo)()
+        else if (k === 'c') {
+          if (window.getSelection()?.toString()) return // copying text on the page
+          s.copyAt(s.sel)
+        } else if (k === 'v' && e.shiftKey) {
+          if (s.sel + 1 < MAX_BLOCKS || s.len < MAX_BLOCKS) s.pasteAt(s.sel + 1)
+        } else if (k === 'v') s.pasteOver(s.sel)
+        else return
+        e.preventDefault()
+        return
       }
-      else if (k === 'v') s.pasteOver(s.sel)
+      if (inField || e.altKey || e.metaKey || e.ctrlKey) return
+      if ((k === 'arrowup' || k === 'arrowdown') && !t?.closest('[role="slider"]')) {
+        const next = s.current + (k === 'arrowup' ? -1 : 1)
+        if (next >= 0 && next < s.slots) s.selectPatch(next)
+      } else if (k >= '1' && k <= '4' && !e.shiftKey) {
+        if (Number(k) <= s.len) s.selectBlock(Number(k) - 1)
+      } else if (k === 'b') s.toggle(s.sel)
       else return
       e.preventDefault()
     }
@@ -144,6 +256,7 @@ export function EditorPage({ initial, sourceLabel, pedal, liveDefault = true }: 
     return () => window.removeEventListener('keydown', h)
   }, [])
 
+  // ---- drag to reorder ----
   const onDragStart = (i: number) => (e: DragEvent) => {
     dragFrom.current = i
     e.dataTransfer.effectAllowed = 'move'
@@ -162,132 +275,195 @@ export function EditorPage({ initial, sourceLabel, pedal, liveDefault = true }: 
     if (from !== null && from !== i) edit((p) => moveBlock(p, from, i), i)
   }
 
+  // ---- status line (fixed height: messages never push the layout) ----
+  const pedalAt = sync.pedalProgram
+  const status: { kind: 'bad' | 'busy' | 'info' | 'ok' | 'quiet'; text: string; dismiss?: () => void } = sync.error
+    ? { kind: 'bad', text: sync.error }
+    : state.saveError
+      ? { kind: 'bad', text: `Can't save. ${state.saveError}`, dismiss: () => dispatch({ type: 'dismissError' }) }
+      : !check.ok
+        ? { kind: 'bad', text: `Save blocked. ${check.reason}` }
+        : sync.busy
+          ? { kind: 'busy', text: sync.busy }
+          : bankMsg
+            ? { kind: 'info', text: bankMsg, dismiss: () => setBankMsg(null) }
+            : notice
+              ? { kind: 'ok', text: notice }
+              : pedal && live
+                ? { kind: 'quiet', text: 'Live: edits play on the pedal right away. Leaving a patch without saving puts its original back.' }
+                : pedal
+                  ? { kind: 'quiet', text: 'Live is off: the pedal plays its saved patch. Your edits reach it when you save.' }
+                  : { kind: 'quiet', text: 'Demo with fake data: nothing is sent to a pedal.' }
+
+  const sameAsPedal = pedalAt === state.current
+  const blockChanges = changes.filter((c) => (c.kind === 'param' || c.kind === 'bypass') && c.block === sel).length
+  const usedByOthers = (except?: number) => patch.blocks.reduce((s, b, i) => (i === except ? s : s + dspShare(b.effectId)), 0)
+
   return (
     <div className="editor">
-      <header className="topbar">
-        <div className="brand">
-          MS-60B Edit{' '}
-          <span className={pedal ? 'source-badge' : 'fake-badge'} title={pedal ? 'Pedal conectado' : 'Prototipo S2: no hay pedal conectado'}>
-            {sourceLabel}
-          </span>
-          {pedal && sync.pedalProgram !== null && (
-            <span className="muted pedal-at" title="Patch activo en el pedal">
-              {' '}· pedal en {String(sync.pedalProgram + 1).padStart(2, '0')} {state.slots[sync.pedalProgram]?.device.name}
+      <header className="band">
+        <div className="now">
+          <div className="now-num" aria-label={`Patch ${num}`}>
+            {num}
+          </div>
+          <div className="now-text">
+            <PatchName key={state.current} name={patch.name} onRename={(n) => edit((p) => rename(p, n))} />
+            <div className={`now-sub ${pedal && !sameAsPedal && pedalAt !== null ? 'elsewhere' : ''}`}>
+              {!pedal ? (
+                'Demo · no pedal connected'
+              ) : pedalAt === null ? (
+                'Pedal patch unknown'
+              ) : sameAsPedal ? (
+                <>
+                  The pedal is on <b>{num}</b>
+                  {live ? ': you hear this patch' : ''}
+                </>
+              ) : (
+                <>
+                  The pedal is on{' '}
+                  <b>
+                    {pad2(pedalAt + 1)} {state.slots[pedalAt]?.device.name}
+                  </b>
+                  , not this patch
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="pills">
+          {pedal ? (
+            <button
+              className={`pill live ${live ? 'on' : ''}`}
+              aria-pressed={live}
+              onClick={() => setLive(!live)}
+              disabled={busy}
+              title={
+                live
+                  ? 'Live is on: edits play on the pedal right away. Leaving a patch without saving puts its original back. Click to turn off.'
+                  : 'Live is off: edits stay in the editor until you save. Click to hear them on the pedal.'
+              }
+            >
+              <span className="dot" aria-hidden="true" />
+              Live
+            </button>
+          ) : (
+            <span className="pill demo" title="No pedal: fake data. Connect the pedal from the start page.">
+              Demo
             </span>
           )}
-          {pedal && (
-            <label
-              className="live-toggle"
-              title="En vivo: lo que editas suena en el pedal al momento. Si sales del patch sin guardar, la app restaura el original."
-            >
-              <input type="checkbox" checked={live} onChange={(e) => setLive(e.target.checked)} disabled={!!sync.busy} /> En vivo
-            </label>
-          )}
+          <button
+            className={`pill dirty ${changeCount ? '' : 'clean'}`}
+            onClick={() => changesRef.current?.focus()}
+            title="Show what differs from the pedal"
+          >
+            {changeCount ? `${plural(changeCount, 'unsaved change')}` : 'No unsaved changes'}
+          </button>
         </div>
-        <div className="patch-title">
-          <span className="slotnum">{String(state.current + 1).padStart(2, '0')}</span>
-          <PatchName key={state.current} name={patch.name} onRename={(n) => edit((p) => rename(p, n))} />
-          {dirty && <span className="dirty-pill">sin guardar</span>}
-        </div>
-        <div className="dsp-total" title="Uso de DSP estimado (g200kg). Los efectos en OFF también consumen.">
-          <span>DSP</span>
-          <div className="meter" role="meter" aria-label="DSP estimado" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(total * 100)}>
-            <div className={`fill ${total > 1 ? 'over' : total > 0.85 ? 'high' : ''}`} style={{ width: `${Math.min(total, 1) * 100}%` }} />
+
+        <div className={`dsp ${total > 1 ? 'over' : ''}`} title="Estimated DSP use. Bypassed effects still use DSP.">
+          <div className="dsp-lbl">
+            <span>DSP</span>
+            <b>{Math.round(total * 100)}%</b>
           </div>
-          <span className={total > 1 ? 'bad' : ''}>{Math.round(total * 100)}%</span>
-        </div>
-        <div className="actions">
-          {pedal && (
-            <>
-              <button onClick={() => void backupNow()} disabled={!!sync.busy} title="Lee los 50 patches del pedal y los descarga como archivo">
-                Respaldar banco
-              </button>
-              <button onClick={() => restoreInput.current?.click()} disabled={!!sync.busy} title="Restaura patches desde un archivo de respaldo">
-                Restaurar banco…
-              </button>
-              <input
-                ref={restoreInput}
-                type="file"
-                accept=".json,application/json"
-                hidden
-                onChange={(e) => {
-                  const f = e.target.files?.[0]
-                  e.target.value = ''
-                  if (f) void openRestore(f)
-                }}
+          <div className="dsp-bar" role="meter" aria-label="Estimated DSP" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(total * 100)}>
+            {patch.blocks.map((b, i) => (
+              <span
+                key={i}
+                className={b.on ? '' : 'off'}
+                title={`${i + 1} · ${effectName(b.effectId)}: ${(dspShare(b.effectId) * 100).toFixed(0)}%`}
+                style={{ width: `${(dspShare(b.effectId) / Math.max(total, 1)) * 100}%`, '--c': categoryVar(getEffect(b.effectId)?.category) } as CSSProperties}
               />
-            </>
-          )}
-          <button
-            onClick={() => void sync.revert()}
-            disabled={(!dirty && !pedal) || !!sync.busy}
-            title={pedal ? 'Descarta los cambios y vuelve a leer el patch del pedal' : 'Descarta los cambios'}
-          >
-            Revertir
+            ))}
+          </div>
+        </div>
+
+        <div className="actions">
+          <button className="icon-btn" onClick={undo} disabled={!canUndo(state) || busy} aria-label="Undo" title={`Undo (${MOD}Z)`}>
+            ↶
+          </button>
+          <button className="icon-btn" onClick={redo} disabled={!canRedo(state) || busy} aria-label="Redo" title={`Redo (⇧${MOD}Z)`}>
+            ↷
           </button>
           <button
-            className="primary"
-            onClick={() => void sync.save()}
-            disabled={!dirty || !check.ok || !!sync.busy}
-            title={!check.ok ? check.reason : undefined}
-            aria-describedby={!dspCheck.ok ? 'save-block-reason' : undefined}
+            onClick={askRevert}
+            disabled={!dirty || busy}
+            title={pedal ? "Drop all unsaved changes to this patch and go back to the pedal's version" : 'Drop all unsaved changes to this patch'}
           >
-            Guardar
+            Revert
           </button>
+          <button
+            className="primary save"
+            onClick={() => void doSave()}
+            disabled={!dirty || !check.ok || busy}
+            title={!check.ok ? check.reason : `Write this patch to the pedal, in ${num} (${MOD}S)`}
+          >
+            Save to {num}
+            <kbd aria-hidden="true">{isMac ? '⌘S' : 'Ctrl+S'}</kbd>
+          </button>
+          <div className="menu-wrap">
+            <button
+              className="quiet"
+              aria-haspopup="menu"
+              aria-expanded={bankOpen}
+              onClick={() => setBankOpen(!bankOpen)}
+              title="Back up or restore all 50 patches"
+            >
+              Bank ▾
+            </button>
+            {bankOpen && (
+              <>
+                <div className="menu-scrim" onClick={() => setBankOpen(false)} />
+                <div className="menu" role="menu" aria-label="Bank" onKeyDown={(e) => e.key === 'Escape' && setBankOpen(false)}>
+                  <button role="menuitem" onClick={() => void backupNow()} disabled={!pedal || busy}>
+                    Back up bank to file…
+                    <small>Reads all 50 patches and downloads them</small>
+                  </button>
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      setBankOpen(false)
+                      restoreInput.current?.click()
+                    }}
+                    disabled={!pedal || busy}
+                  >
+                    Restore bank from file…
+                    <small>Choose which patches to write back</small>
+                  </button>
+                  {!pedal && <p className="menu-note">Needs the pedal connected.</p>}
+                </div>
+              </>
+            )}
+            <input
+              ref={restoreInput}
+              type="file"
+              accept=".json,application/json"
+              hidden
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+                e.target.value = ''
+                if (f) void openRestore(f)
+              }}
+            />
+          </div>
         </div>
       </header>
 
-      {(!dspCheck.ok || state.saveError) && (
-        <div className="banner bad" id="save-block-reason" role="alert">
-          <strong>Guardar bloqueado.</strong> {state.saveError ?? dspCheck.reason}
-        </div>
-      )}
-      {sync.busy && (
-        <div className="banner" role="status">
-          {sync.busy}
-        </div>
-      )}
-      {sync.pending && (
-        <div className="banner warn" role="alert">
-          <strong>
-            El patch {String(sync.pending.slot + 1).padStart(2, '0')} “{sync.pending.name}” pudo quedar con cambios sin guardar
-          </strong>{' '}
-          (la app se cerró mientras editabas en vivo). ¿Lo restauro a como estaba?{' '}
-          <button onClick={() => void sync.restorePending()}>Restaurar</button>{' '}
-          <button onClick={sync.dismissPending}>Dejarlo así</button>
-        </div>
-      )}
-      {pedal && live && (
-        <div className="banner hint">
-          En vivo: lo que editas suena en el pedal. Si cambias de patch, revierte o desconectas sin guardar, la app restaura el original. Lo
-          que muevas en el propio pedal cuenta como edición y también se revierte si no guardas.
-        </div>
-      )}
-      {bankMsg && (
-        <div className="banner" role="status">
-          {bankMsg} <button onClick={() => setBankMsg(null)}>OK</button>
-        </div>
-      )}
-      {sync.error && (
-        <div className="banner bad" role="alert">
-          {sync.error}
-        </div>
-      )}
-      {sync.conflict && (
-        <div className="banner warn" role="alert">
-          <strong>Conflicto en {String(sync.conflict.index + 1).padStart(2, '0')} “{state.slots[sync.conflict.index].working.name}”.</strong>{' '}
-          Cambiaste este patch en el pedal y aquí tienes cambios sin guardar. ¿Cuál conservas?{' '}
-          <button onClick={() => sync.resolveConflict('pedal')}>Usar la del pedal</button>{' '}
-          <button onClick={() => sync.resolveConflict('mine')}>Conservar la mía</button>
-        </div>
-      )}
+      <div className={`statusline ${status.kind}`} role={status.kind === 'bad' ? 'alert' : 'status'} title={status.text}>
+        <span className="status-text">{status.text}</span>
+        {status.dismiss && (
+          <button className="ghost small" onClick={status.dismiss}>
+            OK
+          </button>
+        )}
+      </div>
 
       <div className="body">
         <nav className="patches" aria-label="Patches">
           <div className="patches-head">
-            Patches {dirtyCount > 0 && <span className="muted">· {dirtyCount} con cambios</span>}
+            Patches{dirtyCount > 0 && <span> · {dirtyCount} with changes</span>}
           </div>
-          <ol>
+          <ol ref={listRef}>
             {state.slots.map((s, i) => (
               <li key={i}>
                 <button
@@ -295,9 +471,13 @@ export function EditorPage({ initial, sourceLabel, pedal, liveDefault = true }: 
                   aria-current={i === state.current ? 'true' : undefined}
                   onClick={() => dispatch({ type: 'selectPatch', index: i })}
                 >
-                  <span className="num">{String(i + 1).padStart(2, '0')}</span>
+                  <span className="num">{pad2(i + 1)}</span>
                   <span className="name">{s.working.name}</span>
-                  {isDirty(s) && <span className="dot" aria-label="cambios sin guardar" title="Cambios sin guardar" />}
+                  <ChainSquares patch={s.working} />
+                  <span className="marks">
+                    {pedal && pedalAt === i && <span className="here" aria-label="the pedal is on this patch" title="The pedal is on this patch" />}
+                    {isDirty(s) && <span className="dot" aria-label="unsaved changes" title="Unsaved changes" />}
+                  </span>
                 </button>
               </li>
             ))}
@@ -305,118 +485,209 @@ export function EditorPage({ initial, sourceLabel, pedal, liveDefault = true }: 
         </nav>
 
         <main className="main">
-          <section className="chain" aria-label="Cadena de efectos">
-            <div className="io">IN</div>
-            {Array.from({ length: MAX_BLOCKS }, (_, i) => {
-              const b = patch.blocks[i]
-              if (!b) {
-                const isNextFree = i === patch.blocks.length
+          <div className="work">
+            <section className="chain" aria-label="Effect chain">
+              <div className="cable" aria-hidden="true" />
+              <div className="io">IN</div>
+              {Array.from({ length: MAX_BLOCKS }, (_, i) => {
+                const b = patch.blocks[i]
+                if (!b) {
+                  return (
+                    <div key={i} className="blk empty">
+                      {i === patch.blocks.length && (
+                        <button className="add" onClick={() => setPicker({ mode: 'add' })} disabled={busy}>
+                          + Add effect
+                        </button>
+                      )}
+                    </div>
+                  )
+                }
+                const e = getEffect(b.effectId)
+                const thru = b.effectId === THRU_ID
+                const name = effectName(b.effectId)
+                const dev = deviceBlockFor(slot.device, patch, i)
                 return (
-                  <div key={i} className="slot empty">
-                    {isNextFree ? (
-                      <button className="add" onClick={() => setPicker({ mode: 'add' })} aria-label="Agregar bloque">
-                        + Agregar
+                  <div
+                    key={i}
+                    className={`blk ${i === sel ? 'sel' : ''} ${b.on ? 'on' : 'off'} ${thru ? 'thru' : ''} ${dropAt === i ? 'drop' : ''} ${dev ? '' : 'new'}`}
+                    style={{ '--c': categoryVar(e?.category) } as CSSProperties}
+                    draggable
+                    onDragStart={onDragStart(i)}
+                    onDragOver={onDragOver(i)}
+                    onDragLeave={() => setDropAt(null)}
+                    onDrop={onDrop(i)}
+                    onDragEnd={() => setDropAt(null)}
+                    onClick={() => dispatch({ type: 'selectBlock', index: i })}
+                  >
+                    <div className="band-c" />
+                    <div className="blk-in">
+                      <div className="blk-top">
+                        <span className="blk-cat">
+                          {i + 1} · {e?.category ?? (thru ? 'empty' : '?')}
+                        </span>
+                        {!thru && (
+                          <button
+                            className="sw"
+                            aria-pressed={b.on}
+                            aria-label={`${name}: ${b.on ? 'on' : 'bypassed'}`}
+                            title={b.on ? 'On. Click to bypass (B)' : 'Bypassed. Click to turn on (B)'}
+                            onClick={(ev) => {
+                              ev.stopPropagation()
+                              edit((p) => toggleBlock(p, i), i)
+                            }}
+                          >
+                            <i aria-hidden="true" />
+                            {b.on ? 'On' : 'Bypass'}
+                          </button>
+                        )}
+                      </div>
+                      <button className="block-name" onClick={() => dispatch({ type: 'selectBlock', index: i })} title={effectInfo(b.effectId).fullName}>
+                        {name}
                       </button>
-                    ) : (
-                      <span className="muted">—</span>
-                    )}
+                      <div className="kv">
+                        {thru ? (
+                          <span>No effect</span>
+                        ) : (
+                          e?.params.slice(0, KEY_VALUES).map((pd, j) => {
+                            const changed = dev && dev.params[j] !== b.params[j]
+                            return (
+                              <span key={j} className={changed ? 'chg' : ''}>
+                                {pd.name}
+                                <b>{paramScale(pd, state.firmware).label(b.params[j])}</b>
+                              </span>
+                            )
+                          })
+                        )}
+                      </div>
+                      <div className="blk-tools">
+                        {!thru && (
+                          <button aria-label="Copy block" title={`Copy this effect with its settings (${MOD}C)`} onClick={(ev) => { ev.stopPropagation(); copyAt(i) }}>
+                            Copy
+                          </button>
+                        )}
+                        <button aria-label="Move left" title="Move left" disabled={i === 0} onClick={(ev) => { ev.stopPropagation(); edit((p) => moveBlock(p, i, i - 1), i - 1) }}>
+                          ◀
+                        </button>
+                        <button aria-label="Move right" title="Move right" disabled={i === patch.blocks.length - 1} onClick={(ev) => { ev.stopPropagation(); edit((p) => moveBlock(p, i, i + 1), i + 1) }}>
+                          ▶
+                        </button>
+                        <span className="sp" />
+                        <button className="remove" aria-label="Remove block" title={`Remove this effect (${MOD}Z to undo)`} onClick={(ev) => { ev.stopPropagation(); edit((p) => removeBlock(p, i), Math.max(0, i - 1)) }}>
+                          ✕
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 )
-              }
-              const e = getEffect(b.effectId)
-              const thru = b.effectId === THRU_ID
-              return (
-                <div
-                  key={i}
-                  className={`slot block ${i === sel ? 'selected' : ''} ${b.on ? 'on' : 'off'} ${thru ? 'thru' : ''} ${dropAt === i ? 'drop' : ''}`}
-                  draggable
-                  onDragStart={onDragStart(i)}
-                  onDragOver={onDragOver(i)}
-                  onDragLeave={() => setDropAt(null)}
-                  onDrop={onDrop(i)}
-                  onDragEnd={() => setDropAt(null)}
-                  onClick={() => dispatch({ type: 'selectBlock', index: i })}
-                >
-                  <div className="block-top">
-                    <span className="cat">{e?.category ?? (thru ? 'THRU' : '?')}</span>
-                    <button
-                      className={`led ${b.on ? 'lit' : ''}`}
-                      aria-pressed={b.on}
-                      aria-label={`${e?.name ?? 'Bloque'} ${b.on ? 'activo' : 'en bypass'}`}
-                      title={b.on ? 'Activo (clic para bypass)' : 'Bypass (clic para activar)'}
-                      onClick={(ev) => {
-                        ev.stopPropagation()
-                        edit((p) => toggleBlock(p, i), i)
-                      }}
-                    />
+              })}
+              <div className="io">OUT</div>
+            </section>
+
+            <section className="panel" aria-label={`Parameters of ${def?.name ?? 'block'}`} style={{ '--c': categoryVar(def?.category) } as CSSProperties}>
+              <header className="panel-head">
+                <div className="slot-badge" aria-label={`Block ${sel + 1}`}>
+                  {sel + 1}
+                </div>
+                <div className="ph-title">
+                  <h2>
+                    {def?.name ?? 'Unknown effect'}
+                    {info.fullName && <span className="full"> {info.fullName}</span>}
+                  </h2>
+                  <div className="meta">
+                    {def?.category ?? 'Empty block'} · DSP ~{(dspShare(block.effectId) * 100).toFixed(0)}% · {block.on ? 'On' : 'Bypassed'}
+                    {info.reference && <> · based on {info.reference}</>}
                   </div>
-                  <button className="block-name" onClick={() => dispatch({ type: 'selectBlock', index: i })}>
-                    {e?.name ?? `0x${b.effectId.toString(16)}`}
+                  {info.description && <p className="desc">{info.description}</p>}
+                </div>
+                <div className="ph-actions">
+                  <span className="block-changes">{blockChanges > 0 && <><b>{plural(blockChanges, 'change')}</b> in this block</>}</span>
+                  {block.effectId !== THRU_ID && (
+                    <button onClick={() => edit((p) => toggleBlock(p, sel), sel)} title="Bypass or turn on this block (B)">
+                      {block.on ? 'Bypass' : 'Turn on'}
+                    </button>
+                  )}
+                  <button onClick={() => setPicker({ mode: 'change', index: sel })} disabled={busy}>
+                    Change effect…
                   </button>
-                  <div className="block-dsp" title={`DSP estimado ${(dspShare(b.effectId) * 100).toFixed(0)}%`}>
-                    <div style={{ width: `${Math.min(dspShare(b.effectId), 1) * 100}%` }} />
-                  </div>
-                  <div className="block-tools">
-                    <button aria-label="Mover a la izquierda" disabled={i === 0} onClick={(ev) => { ev.stopPropagation(); edit((p) => moveBlock(p, i, i - 1), i - 1) }}>◀</button>
-                    <button aria-label="Mover a la derecha" disabled={i === patch.blocks.length - 1} onClick={(ev) => { ev.stopPropagation(); edit((p) => moveBlock(p, i, i + 1), i + 1) }}>▶</button>
-                    <button aria-label="Quitar bloque" onClick={(ev) => { ev.stopPropagation(); edit((p) => removeBlock(p, i), Math.max(0, i - 1)) }}>✕</button>
-                    {!thru && (
-                      <button aria-label="Copiar bloque" title="Copiar efecto con sus parámetros (Cmd/Ctrl+C)" onClick={(ev) => { ev.stopPropagation(); copyAt(i) }}>⧉</button>
-                    )}
-                  </div>
                 </div>
-              )
-            })}
-            <div className="io">OUT</div>
-          </section>
-
-          {clip && (
-            <ClipboardBar
-              clip={clip}
-              target={sel}
-              blocks={patch.blocks.map((b) => getEffect(b.effectId)?.name ?? (b.effectId === THRU_ID ? 'THRU' : '?'))}
-              onReplace={() => pasteOver(sel)}
-              onInsert={(at) => pasteAt(at)}
-              onClear={() => setClip(null)}
-            />
-          )}
-
-          <section className="panel" aria-label="Parámetros del bloque">
-            <header className="panel-head">
-              <div>
-                <h2>
-                  {sel + 1}. {def?.name ?? 'Desconocido'}
-                </h2>
-                <div className="muted">
-                  {def?.category ?? '—'} · DSP ~{(dspShare(block.effectId) * 100).toFixed(0)}% · {block.on ? 'activo' : 'bypass'}
+              </header>
+              {def && def.params.length > 0 ? (
+                <div className="params">
+                  {def.params.map((p, j) => (
+                    <ParamKnob
+                      key={`${state.current}-${sel}-${block.effectId}-${j}`}
+                      def={p}
+                      raw={block.params[j]}
+                      device={devBlock?.params[j]}
+                      firmware={state.firmware}
+                      onChange={(v) => edit((pt) => setParam(pt, sel, j, v), undefined, `p${state.current}.${sel}.${j}`)}
+                    />
+                  ))}
                 </div>
-              </div>
-              <button onClick={() => setPicker({ mode: 'change', index: sel })}>Cambiar tipo…</button>
-            </header>
-            {def && def.params.length > 0 ? (
-              <div className="params">
-                {def.params.map((p, j) => (
-                  <ParamKnob
-                    key={`${block.effectId}-${j}`}
-                    def={p}
-                    raw={block.params[j]}
-                    firmware={state.firmware}
-                    onChange={(v) => edit((pt) => setParam(pt, sel, j, v))}
-                  />
-                ))}
-              </div>
-            ) : (
-              <p className="muted">THRU no tiene parámetros. Usa “Cambiar tipo…” para elegir un efecto.</p>
+              ) : (
+                <p className="empty-note">This block is empty (THRU). Use “Change effect…” to put an effect in it.</p>
+              )}
+            </section>
+
+            {clip && clipBar && (
+              <ClipboardBar
+                clip={clip}
+                target={sel}
+                blocks={patch.blocks.map((b) => effectName(b.effectId))}
+                onReplace={() => pasteOver(sel)}
+                onInsert={(at) => pasteAt(at)}
+                onHide={() => setClipBar(false)}
+              />
             )}
-          </section>
+          </div>
+
+          <aside className="changes" aria-labelledby="changes-title" ref={changesRef} tabIndex={-1}>
+            <h3 id="changes-title">
+              Changes vs pedal <span className="count">{changes.length}</span>
+            </h3>
+            {changes.length === 0 ? (
+              <p className="muted">{dirty ? 'Only hidden values differ. Save or revert.' : `None. ${num} matches what the pedal has saved.`}</p>
+            ) : (
+              <ul>
+                {changes.map((c, i) => {
+                  const l = changeLine(c, patch, state.firmware)
+                  return (
+                    <li key={`${c.kind}-${i}`}>
+                      <div className="c-what">{l.what}</div>
+                      <div className="c-vals">
+                        <span className="from">{l.from}</span> → <b>{l.to}</b>
+                      </div>
+                      <button className="small" onClick={() => undoOne(c)} aria-label={`Undo ${l.what}`} title="Put back the pedal's value">
+                        Undo
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+            {changes.length > 0 && <p className="muted small">Undo puts one value back to what the pedal has. Revert drops them all.</p>}
+          </aside>
         </main>
       </div>
 
+      <footer className="foot">
+        <span><kbd>↑</kbd><kbd>↓</kbd> patch</span>
+        <span><kbd>1</kbd>–<kbd>4</kbd> block</span>
+        <span><kbd>B</kbd> bypass</span>
+        <span><kbd>{MOD}Z</kbd> undo · <kbd>⇧{MOD}Z</kbd> redo</span>
+        <span><kbd>{MOD}S</kbd> save</span>
+        <span><kbd>{MOD}C</kbd> / <kbd>{MOD}V</kbd> copy / paste block</span>
+        <span className="hint">Knobs: drag or wheel, Shift = fine, double-click = default</span>
+        <span className="sp" />
+        <span>{pedal ? `MS-60B · firmware ${state.firmware.toFixed(2)} · USB` : `Demo · fake data · firmware ${state.firmware.toFixed(2)}`}</span>
+      </footer>
+
       {picker && (
         <TypePicker
-          title={picker.mode === 'add' ? 'Agregar bloque' : `Cambiar tipo del bloque ${picker.index + 1}`}
+          title={picker.mode === 'add' ? `Add effect to block ${patch.blocks.length + 1}` : `Change effect in block ${picker.index + 1}`}
           firmware={state.firmware}
           current={picker.mode === 'change' ? patch.blocks[picker.index].effectId : undefined}
+          dspUsedByOthers={usedByOthers(picker.mode === 'change' ? picker.index : undefined)}
           onClose={() => setPicker(null)}
           onPick={(id) => {
             if (picker.mode === 'add') edit((p) => addBlock(p, id), patch.blocks.length)
@@ -426,16 +697,29 @@ export function EditorPage({ initial, sourceLabel, pedal, liveDefault = true }: 
         />
       )}
 
+      {confirmRevert && (
+        <ConfirmDialog
+          title={`Revert ${plural(changeCount, 'change')} to ${num}?`}
+          confirm={`Revert ${plural(changeCount, 'change')}`}
+          onConfirm={() => void doRevert()}
+          onCancel={() => setConfirmRevert(false)}
+        >
+          <p>
+            {num} goes back to the version saved on the pedal. {MOD}Z brings your changes back.
+          </p>
+        </ConfirmDialog>
+      )}
+
       {restore && (
         <BankRestoreDialog
           fileName={restore.fileName}
           items={restore.items}
           warning={
             restore.backup.identity && restore.backup.identity.version !== state.firmware.toFixed(2)
-              ? `El respaldo es de la versión de firmware ${restore.backup.identity.version}; el pedal tiene la ${state.firmware.toFixed(2)}.`
+              ? `The backup is from firmware ${restore.backup.identity.version}; the pedal has ${state.firmware.toFixed(2)}.`
               : undefined
           }
-          blocked={dirtyCount > 0 ? 'Hay patches con cambios sin guardar: guárdalos o reviértelos antes de restaurar.' : undefined}
+          blocked={dirtyCount > 0 ? 'Some patches have unsaved changes: save or revert them before restoring.' : undefined}
           onRun={(slots, onProgress, cancelled) => sync.restoreBank(restore.backup.patches, slots, onProgress, cancelled)}
           onDownloadCurrent={() =>
             download(
@@ -450,128 +734,52 @@ export function EditorPage({ initial, sourceLabel, pedal, liveDefault = true }: 
         />
       )}
 
+      {sync.pending && (
+        <PendingRestoreDialog
+          slot={sync.pending.slot}
+          at={sync.pending.at}
+          now={state.slots[sync.pending.slot].device}
+          original={patchFromDevice(sync.pending.raw)}
+          onRestore={() => void sync.restorePending()}
+          onKeep={sync.dismissPending}
+        />
+      )}
+
+      {sync.conflict && (
+        <ConflictDialog
+          index={sync.conflict.index}
+          pedal={sync.conflict.patch}
+          mine={state.slots[sync.conflict.index].working}
+          firmware={state.firmware}
+          onPedal={() => sync.resolveConflict('pedal')}
+          onMine={() => sync.resolveConflict('mine')}
+        />
+      )}
+
       {state.pendingSwitch !== null && (
         <SwitchDialog
+          fromNum={state.current + 1}
           from={patch.name}
+          toNum={state.pendingSwitch + 1}
           to={state.slots[state.pendingSwitch].working.name}
+          count={changeCount}
           canSave={check.ok}
           reason={check.reason}
           onChoice={(choice) => {
             if (choice === 'save' && pedal) {
               // Write first; once saved the patch is clean and switching discards nothing.
-              void sync.save().then((ok) => dispatch({ type: 'resolveSwitch', choice: ok ? 'discard' : 'cancel' }))
-            } else dispatch({ type: 'resolveSwitch', choice })
+              const at = state.current
+              void sync.save().then((ok) => {
+                if (ok) flash(`Saved to ${pad2(at + 1)} ✓`)
+                dispatch({ type: 'resolveSwitch', choice: ok ? 'discard' : 'cancel' })
+              })
+            } else {
+              if (choice === 'save' && check.ok) flash(`Saved to ${num} ✓`)
+              dispatch({ type: 'resolveSwitch', choice })
+            }
           }}
         />
       )}
     </div>
-  )
-}
-
-function PatchName({ name, onRename }: { name: string; onRename: (n: string) => void }) {
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(name)
-  if (!editing) {
-    return (
-      <button
-        className="pname pname-btn"
-        title="Clic para cambiar el nombre: hasta 10 caracteres; letras, números, espacio y ! # $ % & ' ( ) + , - . ; = @ [ ] ^ _ ` { } ~"
-        onClick={() => {
-          setDraft(name)
-          setEditing(true)
-        }}
-      >
-        {name || '—'}
-      </button>
-    )
-  }
-  const commit = () => {
-    onRename(draft)
-    setEditing(false)
-  }
-  return (
-    <input
-      className="pname pname-input"
-      aria-label="Nombre del patch"
-      autoFocus
-      onFocus={(e) => e.target.select()}
-      value={draft}
-      maxLength={NAME_MAX}
-      onChange={(e) => setDraft([...e.target.value].filter(isNameChar).join(''))}
-      onBlur={commit}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') commit()
-        else if (e.key === 'Escape') setEditing(false)
-      }}
-    />
-  )
-}
-
-function ClipboardBar(props: {
-  clip: { block: Block; from: string }
-  target: number
-  blocks: string[]
-  onReplace: () => void
-  onInsert: (at: number) => void
-  onClear: () => void
-}) {
-  const { clip, target, blocks } = props
-  const name = getEffect(clip.block.effectId)?.name ?? '?'
-  const n = target + 1
-  const loneThru = blocks.length === 1 && blocks[0] === 'THRU'
-  const full = blocks.length >= MAX_BLOCKS
-  const drops = full && !loneThru ? ` (se quita ${blocks[MAX_BLOCKS - 1]})` : ''
-  return (
-    <div className="clipboard" role="region" aria-label="Portapapeles">
-      <span>
-        Copiado: <strong>{name}</strong>
-        {clip.block.on ? '' : ' (bypass)'} <span className="muted">· {clip.from}</span>
-      </span>
-      <span className="clip-actions">
-        <button onClick={props.onReplace} title="Cmd/Ctrl+V">Reemplazar bloque {n}</button>
-        {!loneThru && (
-          <>
-            <button onClick={() => props.onInsert(target)}>Insertar antes de {n}{drops}</button>
-            {!(full && target === MAX_BLOCKS - 1) && (
-              <button onClick={() => props.onInsert(target + 1)} title="Shift+Cmd/Ctrl+V">
-                Insertar después de {n}
-                {drops}
-              </button>
-            )}
-          </>
-        )}
-        <button className="ghost" onClick={props.onClear} aria-label="Vaciar portapapeles">✕</button>
-      </span>
-    </div>
-  )
-}
-
-function SwitchDialog(props: {
-  from: string
-  to: string
-  canSave: boolean
-  reason?: string
-  onChoice: (c: 'save' | 'discard' | 'cancel') => void
-}) {
-  const ref = useRef<HTMLDialogElement>(null)
-  useEffect(() => {
-    const d = ref.current
-    if (d && !d.open) d.showModal?.()
-  }, [])
-  return (
-    <dialog ref={ref} className="confirm" onCancel={() => props.onChoice('cancel')} aria-labelledby="switch-title">
-      <h2 id="switch-title">“{props.from}” tiene cambios sin guardar</h2>
-      <p>¿Qué hago antes de abrir “{props.to}”?</p>
-      {!props.canSave && <p className="bad">No se puede guardar: {props.reason}</p>}
-      <div className="row">
-        <button className="primary" onClick={() => props.onChoice('save')} disabled={!props.canSave}>
-          Guardar
-        </button>
-        <button onClick={() => props.onChoice('discard')}>Descartar</button>
-        <button className="ghost" onClick={() => props.onChoice('cancel')}>
-          Cancelar
-        </button>
-      </div>
-    </dialog>
   )
 }

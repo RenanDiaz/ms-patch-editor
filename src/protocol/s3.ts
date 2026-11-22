@@ -71,7 +71,7 @@ export class MidiSession {
       this.waiter = { match, resolve }
       timer = setTimeout(() => {
         this.waiter = null
-        reject(new S3Error(`timeout esperando ${what}`))
+        reject(new S3Error(`timeout waiting for ${what}`))
       }, this.timeoutMs)
     })
     try {
@@ -167,14 +167,14 @@ export function writeSlot(
     const findAck = () => s.log.slice(from).find((l) => l.dir === 'in' && isStoreAck(l.bytes))
     for (let waited = 0; !findAck() && waited < ackTimeoutMs; waited += 100) await s.sleep(100)
     const ack = findAck()?.bytes ?? null
-    if (io.pending() !== 0) throw new S3Error('quedaron escrituras aprobadas sin enviar')
+    if (io.pending() !== 0) throw new S3Error('approved writes were left unsent')
     const readBack = await readStored(s, slot)
     return { ack, readBack, diff: diffOffsets(bytes, readBack) }
   })
 }
 
 export const autoSaveApproval = (bytes: ArrayLike<number>, slot: number): WriteApproval => ({
-  label: `Enviar al buffer de edición del patch ${slot + 1} (0x28, sin Store)`,
+  label: `Send to the edit buffer of patch ${slot + 1} (0x28, no Store)`,
   writes: [sendPatch(bytes)],
 })
 
@@ -214,7 +214,7 @@ export interface ParamEdit {
 }
 
 export const paramEditApproval = (slot: number, edits: readonly ParamEdit[]): WriteApproval => ({
-  label: `Enviar ${edits.length} Parameter Edit (0x31) al patch ${slot + 1}`,
+  label: `Send ${edits.length} Parameter Edit (0x31) to patch ${slot + 1}`,
   writes: edits.map((e) => parameterEdit(e.effect, e.param, e.value)),
 })
 

@@ -57,14 +57,14 @@ export function BankRestoreDialog({ fileName, items, warning, blocked, onRun, on
   const failed = results?.filter((r) => !r.ok) ?? []
   return (
     <dialog ref={ref} className="confirm bank-dialog" onCancel={(e) => (running ? e.preventDefault() : onClose())} aria-labelledby="restore-title">
-      <h2 id="restore-title">Restaurar banco desde “{fileName}”</h2>
+      <h2 id="restore-title">Restore bank from “{fileName}”</h2>
       {warning && <p className="bad">{warning}</p>}
 
       {results ? (
         <>
           <p>
-            {results.length - failed.length} de {results.length} ranuras restauradas y verificadas
-            {results.length < chosen.size && ` (cancelado: faltaron ${chosen.size - results.length})`}.
+            {results.length - failed.length} of {results.length} patches restored and checked
+            {results.length < chosen.size && ` (stopped: ${chosen.size - results.length} not written)`}.
           </p>
           {failed.length > 0 && (
             <ul className="bad">
@@ -77,27 +77,27 @@ export function BankRestoreDialog({ fileName, items, warning, blocked, onRun, on
           )}
           <div className="row">
             <button className="primary" onClick={onClose}>
-              Cerrar
+              Close
             </button>
           </div>
         </>
       ) : items.length === 0 ? (
         <>
-          <p>El pedal ya tiene exactamente lo que guarda el respaldo. No hay nada que escribir.</p>
+          <p>The pedal already has exactly what the backup holds. Nothing to write.</p>
           <div className="row">
             <button className="primary" onClick={onClose}>
-              Cerrar
+              Close
             </button>
           </div>
         </>
       ) : (
         <>
           <p>
-            Estas ranuras son distintas en el pedal y en el respaldo. Las marcadas se reemplazan con la versión del respaldo; cada
-            una se guarda y se vuelve a leer para comprobarla.
+            These patches differ between the pedal and the backup. The checked ones are replaced with the backup's version; each
+            one is saved and read back to check it.
           </p>
           <p className="muted">
-            Antes, si quieres, <button className="linklike" onClick={onDownloadCurrent}>descarga un respaldo del estado actual</button>.
+            First, if you want, <button className="linklike" onClick={onDownloadCurrent}>download a backup of the bank as it is now</button>.
           </p>
           <ul className="restore-list">
             {items.map((i) => (
@@ -118,18 +118,18 @@ export function BankRestoreDialog({ fileName, items, warning, blocked, onRun, on
           {blocked && <p className="bad">{blocked}</p>}
           {running && (
             <p role="status">
-              Escribiendo {num(progress.slot)} ({progress.done + 1} de {chosen.size})…
+              Writing {num(progress.slot)} ({progress.done + 1} of {chosen.size})…
             </p>
           )}
           <div className="row">
             <button className="primary" onClick={run} disabled={running || chosen.size === 0 || !!blocked}>
-              Escribir {chosen.size} ranura{chosen.size === 1 ? '' : 's'}
+              Restore {chosen.size} patch{chosen.size === 1 ? '' : 'es'}
             </button>
             {running ? (
-              <button onClick={() => (cancel.current = true)}>Detener después de esta</button>
+              <button onClick={() => (cancel.current = true)}>Stop after this one</button>
             ) : (
               <button className="ghost" onClick={onClose}>
-                Cancelar
+                Cancel
               </button>
             )}
           </div>

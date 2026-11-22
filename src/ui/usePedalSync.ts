@@ -118,7 +118,7 @@ export function usePedalSync(pedal: PedalSession | undefined, state: BankState, 
   const restoreBuffer = async (p: PedalSession, slot: number) => {
     const s = stateRef.current.slots[slot]
     if (!s.raw || !bufferDirty(slot)) return
-    await p.sendLive(slot, [Uint8Array.from(s.raw)], `Restaurar el patch ${slot + 1}`)
+    await p.sendLive(slot, [Uint8Array.from(s.raw)], `Restore patch ${slot + 1}`)
     bufferRef.current = { slot, patch: s.device }
   }
 
@@ -128,7 +128,7 @@ export function usePedalSync(pedal: PedalSession | undefined, state: BankState, 
     if (!s.raw) return
     const back = await p.readSlot(slot)
     if (diffOffsets(back, s.raw).length) {
-      throw new Error(`La ranura ${slot + 1} no volvió a su versión original. Revisa el patch en el pedal.`)
+      throw new Error(`Patch ${slot + 1} did not go back to its original version. Check it on the pedal.`)
     }
     clearPending(slot)
   }
@@ -168,7 +168,7 @@ export function usePedalSync(pedal: PedalSession | undefined, state: BankState, 
     if (!pedal || !liveRef.current) return
     const byPedal = movedByPedalRef.current === next
     movedByPedalRef.current = null
-    void enqueue(`Cambiando al patch ${next + 1}…`, async () => {
+    void enqueue(`Switching to patch ${String(next + 1).padStart(2, '0')}…`, async () => {
       if (bufferDirty(prev)) {
         // The pedal keeps the buffer when it leaves a patch: put the original back first.
         if (byPedal) await pedal.select(prev)
@@ -194,7 +194,7 @@ export function usePedalSync(pedal: PedalSession | undefined, state: BankState, 
     }
     if (!pedal) return
     const slot = stateRef.current.current
-    void enqueue(live ? 'Activando escucha en vivo…' : 'Restaurando el patch en el pedal…', async () => {
+    void enqueue(live ? 'Turning Live on…' : 'Putting the original patch back on the pedal…', async () => {
       if (live) {
         await pedal.select(slot)
         setPedalProgram(pedal.activeProgram)
@@ -297,12 +297,12 @@ export function usePedalSync(pedal: PedalSession | undefined, state: BankState, 
       return Promise.resolve()
     }
     const index = stateRef.current.current
-    return enqueue('Leyendo…', async () => {
+    return enqueue('Reading the patch from the pedal…', async () => {
       setError(null)
       if (liveRef.current && pedal.activeProgram === index) await restoreBuffer(pedal, index)
       const raw = await pedal.readSlot(index)
       const patch = patchFromDevice(raw)
-      act({ type: 'loadSlot', index, patch, raw, mode: 'replace' })
+      act({ type: 'loadSlot', index, patch, raw, mode: 'replace', undoable: true })
       if (pedal.activeProgram === index) bufferRef.current = { slot: index, patch }
       if (conflict?.index === index) setConflict(null)
       const original = stateRef.current.slots[index].raw
@@ -318,14 +318,14 @@ export function usePedalSync(pedal: PedalSession | undefined, state: BankState, 
     }
     const index = stateRef.current.current
     let ok = false
-    await enqueue('Guardando…', async () => {
+    await enqueue(`Saving to ${String(stateRef.current.current + 1).padStart(2, '0')}…`, async () => {
       setError(null)
       const s = stateRef.current.slots[index]
-      if (!s.raw) throw new Error('No hay bytes leídos del pedal para esta ranura.')
+      if (!s.raw) throw new Error('No bytes were read from the pedal for this patch.')
       const back = pedal.activeProgram
       const bytes = encodePatch60B(s.raw, toEncodable(s.working))
       const r = await pedal.save(index, bytes)
-      if (r.diff.length) throw new Error(`Guardado, pero la relectura difiere en los bytes ${r.diff.join(', ')}.`)
+      if (r.diff.length) throw new Error(`Saved, but reading it back differs at bytes ${r.diff.join(', ')}.`)
       const patch = patchFromDevice(r.readBack)
       act({ type: 'loadSlot', index, patch, raw: r.readBack, mode: 'replace' })
       bufferRef.current = { slot: index, patch }
@@ -348,9 +348,9 @@ export function usePedalSync(pedal: PedalSession | undefined, state: BankState, 
   const backupBank = async (onProgress?: (slot: number) => void): Promise<BankCapture | null> => {
     if (!pedal) return null
     const dirty = dirtySlots()
-    if (dirty.length) throw new Error(`Guarda o revierte primero los patches con cambios: ${dirty.join(', ')}.`)
+    if (dirty.length) throw new Error(`Save or revert the patches with unsaved changes first: ${dirty.join(', ')}.`)
     const out: { cap: BankCapture | null } = { cap: null }
-    await enqueue('Leyendo el banco…', async () => {
+    await enqueue('Reading the bank…', async () => {
       setError(null)
       const cap = await pedal.scan(onProgress)
       out.cap = cap
@@ -362,7 +362,7 @@ export function usePedalSync(pedal: PedalSession | undefined, state: BankState, 
       if (a !== null) bufferRef.current = { slot: a, patch: patchFromDevice(cap.patches[a]) }
       setPedalProgram(a)
     })
-    if (!out.cap) throw new Error('No se pudo leer el banco.')
+    if (!out.cap) throw new Error('Could not read the bank.')
     return out.cap
   }
 
@@ -380,8 +380,8 @@ export function usePedalSync(pedal: PedalSession | undefined, state: BankState, 
     const results: { slot: number; ok: boolean; message?: string }[] = []
     if (!pedal) return results
     const dirty = dirtySlots()
-    if (dirty.length) throw new Error(`Guarda o revierte primero los patches con cambios: ${dirty.join(', ')}.`)
-    await enqueue('Restaurando el banco…', async () => {
+    if (dirty.length) throw new Error(`Save or revert the patches with unsaved changes first: ${dirty.join(', ')}.`)
+    await enqueue('Restoring the bank…', async () => {
       setError(null)
       const back = liveRef.current ? stateRef.current.current : pedal.activeProgram
       try {
@@ -392,7 +392,7 @@ export function usePedalSync(pedal: PedalSession | undefined, state: BankState, 
             const r = await pedal.save(slot, backup[slot])
             act({ type: 'loadSlot', index: slot, patch: patchFromDevice(r.readBack), raw: r.readBack, mode: 'replace' })
             if (!r.diff.length) clearPending(slot)
-            results.push(r.diff.length ? { slot, ok: false, message: `la relectura difiere en los bytes ${r.diff.join(', ')}` } : { slot, ok: true })
+            results.push(r.diff.length ? { slot, ok: false, message: `reading it back differs at bytes ${r.diff.join(', ')}` } : { slot, ok: true })
           } catch (e) {
             results.push({ slot, ok: false, message: (e as Error).message })
           }
@@ -416,10 +416,10 @@ export function usePedalSync(pedal: PedalSession | undefined, state: BankState, 
   const restorePending = () => {
     const p = pending
     if (!pedal || !p) return Promise.resolve()
-    return enqueue(`Restaurando el patch ${p.slot + 1}…`, async () => {
+    return enqueue(`Restoring patch ${p.slot + 1}…`, async () => {
       const back = pedal.activeProgram
       const r = await pedal.save(p.slot, p.raw)
-      if (r.diff.length) throw new Error(`La relectura del patch ${p.slot + 1} difiere en los bytes ${r.diff.join(', ')}.`)
+      if (r.diff.length) throw new Error(`Reading patch ${p.slot + 1} back differs at bytes ${r.diff.join(', ')}.`)
       act({ type: 'loadSlot', index: p.slot, patch: patchFromDevice(r.readBack), raw: r.readBack, mode: 'replace' })
       clearPending(p.slot)
       setPendingState(null)

@@ -102,7 +102,7 @@ export function S1ReadPage() {
       const theirs = readG200kgBankZip(new Uint8Array(await file.arrayBuffer()))
       setComparison(compareWithG200kg(capture.patches, theirs))
     } catch (e) {
-      setStatus({ kind: 'error', message: `No se pudo leer el zip: ${(e as Error).message}`, ports })
+      setStatus({ kind: 'error', message: `Couldn't read the zip file: ${(e as Error).message}. Choose a bank .zip exported from the reference utility.`, ports })
     }
   }
 
@@ -114,28 +114,28 @@ export function S1ReadPage() {
   return (
     <main className="s1">
       <header>
-        <h1>MS-60B · S1 lectura</h1>
+        <h1>MS-60B · S1 read</h1>
         <p className="muted">
-          Solo lectura. Envía Identity Request, Parameter Edit Enable, Request Current Program, Program Change 0–49 y
-          Request Patch, y al final vuelve al patch que estaba activo. Cualquier otro mensaje está bloqueado.
+          Read only. Sends Identity Request, Parameter Edit Enable, Request Current Program, Program Change 0–49 and
+          Request Patch, then switches back to the patch that was active. Every other message is blocked.
         </p>
       </header>
 
       <section className="bar">
         <button onClick={connect} disabled={status.kind === 'connecting' || status.kind === 'scanning'}>
-          Conectar
+          Connect
         </button>
         <button onClick={scan} disabled={!ports || status.kind === 'scanning'}>
-          Leer 50 patches
+          Read 50 patches
         </button>
         <button onClick={readActiveNow} disabled={!ports || status.kind === 'scanning'}>
-          Leer patch activo (sin cambiar de patch)
+          Read active patch (without switching patch)
         </button>
         <button onClick={downloadCapture} disabled={!capture}>
-          Descargar captura (JSON)
+          Download capture (JSON)
         </button>
         <label className={`file ${capture ? '' : 'disabled'}`}>
-          Comparar con banco de g200kg (.zip)
+          Compare with a reference bank (.zip)
           <input
             type="file"
             accept=".zip"
@@ -144,10 +144,10 @@ export function S1ReadPage() {
           />
         </label>
         <span className="status" role="status">
-          {status.kind === 'idle' && 'Sin conectar'}
-          {status.kind === 'connecting' && 'Conectando…'}
-          {status.kind === 'connected' && `Conectado: ${status.ports}`}
-          {status.kind === 'scanning' && `Leyendo ${Math.min(status.slot + 1, 50)}/50…`}
+          {status.kind === 'idle' && 'Not connected'}
+          {status.kind === 'connecting' && 'Connecting…'}
+          {status.kind === 'connected' && `Connected: ${status.ports}`}
+          {status.kind === 'scanning' && `Reading ${Math.min(status.slot + 1, 50)}/50…`}
           {status.kind === 'error' && <span className="bad">Error: {status.message}</span>}
         </span>
       </section>
@@ -155,19 +155,19 @@ export function S1ReadPage() {
       {activeReads.length > 0 && (
         <section className="active-reads">
           <h2>
-            Lecturas del patch activo{' '}
-            <button onClick={downloadActiveReads}>Descargar lecturas</button>
+            Active patch reads{' '}
+            <button onClick={downloadActiveReads}>Download reads</button>
           </h2>
           <table>
             <thead>
               <tr>
-                <td>Hora</td>
+                <td>Time</td>
                 <td>Patch</td>
                 <td>AMP (fw)</td>
                 <td>CAB</td>
-                <td>Byte gabinete pedal / app</td>
-                <td>Byte v2 pedal / app</td>
-                <td>Resto</td>
+                <td>Cab byte pedal / app</td>
+                <td>v2 byte pedal / app</td>
+                <td>Other bytes</td>
               </tr>
             </thead>
             <tbody>
@@ -178,7 +178,7 @@ export function S1ReadPage() {
                     <td>
                       {String(r.slot + 1).padStart(2, '0')} {r.check.name}
                     </td>
-                    <td>{a ? `${a.slot + 1}. ${a.name} (fw${a.minFirmware})` : 'sin AMP'}</td>
+                    <td>{a ? `${a.slot + 1}. ${a.name} (fw${a.minFirmware})` : 'no AMP'}</td>
                     <td>{a?.cab ?? '—'}</td>
                     <td className={a && a.cabByte.pedal !== a.cabByte.encoder ? 'bad' : 'ok'}>
                       {a ? `0x${a.cabByte.pedal.toString(16)} / 0x${a.cabByte.encoder.toString(16)}` : '—'}
@@ -186,7 +186,7 @@ export function S1ReadPage() {
                     <td className={a && a.v2Byte.pedal !== a.v2Byte.encoder ? 'bad' : 'ok'}>
                       {a ? `0x${a.v2Byte.pedal.toString(16)} / 0x${a.v2Byte.encoder.toString(16)}` : '—'}
                     </td>
-                    <td className={r.check.diffs.length ? 'bad' : 'ok'}>{r.check.diffs.length ? `difiere en ${r.check.diffs.join(', ')}` : 'idéntico'}</td>
+                    <td className={r.check.diffs.length ? 'bad' : 'ok'}>{r.check.diffs.length ? `differs at ${r.check.diffs.join(', ')}` : 'identical'}</td>
                   </tr>
                 )),
               )}
@@ -197,13 +197,13 @@ export function S1ReadPage() {
 
       {capture && (
         <p className="muted">
-          Firmware {capture.identity.version} · patch activo al conectar: {capture.originalProgram + 1} ·{' '}
-          {capture.log.length} mensajes registrados
+          Firmware {capture.identity.version} · active patch when connected: {capture.originalProgram + 1} ·{' '}
+          {capture.log.length} messages logged
           {comparison && (
             <>
               {' '}
-              · comparación con g200kg:{' '}
-              <strong className={matches === 50 ? 'ok' : 'bad'}>{matches}/50 coinciden</strong>
+              · comparison with reference bank:{' '}
+              <strong className={matches === 50 ? 'ok' : 'bad'}>{matches}/50 match</strong>
             </>
           )}
         </p>
@@ -232,7 +232,7 @@ export function S1ReadPage() {
                 {String(selected + 1).padStart(2, '0')} · {sel.name || '—'}
               </h2>
               <p className="muted">
-                maxFx {sel.maxFx} · foco {sel.focus + 1} · DSP full bits 0b{sel.dspFull.toString(2).padStart(4, '0')}
+                maxFx {sel.maxFx} · focus {sel.focus + 1} · DSP full bits 0b{sel.dspFull.toString(2).padStart(4, '0')}
               </p>
               <div className="fx">
                 {sel.effects.map((e, n) => {
@@ -259,7 +259,7 @@ export function S1ReadPage() {
               </div>
               {comparison?.[selected] && comparison[selected].status !== 'match' && (
                 <div className="diffs">
-                  <h3>Diferencias con g200kg</h3>
+                  <h3>Differences from reference bank</h3>
                   <ul>
                     {comparison[selected].diffs.map((d) => (
                       <li key={d}>{d}</li>
@@ -269,12 +269,12 @@ export function S1ReadPage() {
               )}
               {comparison?.[selected] && comparison[selected].rawDiffOffsets.length > 0 && (
                 <p className="muted">
-                  Bytes crudos distintos (informativo, g200kg reconstruye desde plantilla):{' '}
+                  Raw bytes that differ (for information only; the reference bank is rebuilt from a template):{' '}
                   {comparison[selected].rawDiffOffsets.join(', ')}
                 </p>
               )}
               <details>
-                <summary>Bytes crudos</summary>
+                <summary>Raw bytes</summary>
                 <pre>{toHex(sel.raw)}</pre>
               </details>
             </div>

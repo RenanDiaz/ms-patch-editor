@@ -29,13 +29,13 @@ describe('ParamKnob', () => {
     const onChange = vi.fn()
     render(<ParamKnob def={param('D Comp', 'Level')} raw={100} firmware={FW} onChange={onChange} />)
     fireEvent.doubleClick(screen.getByText('100'))
-    const input = screen.getByRole('textbox', { name: /escribir valor/ })
+    const input = screen.getByRole('textbox', { name: /type a value/ })
     fireEvent.change(input, { target: { value: '120' } })
     fireEvent.keyDown(input, { key: 'Enter' })
     expect(onChange).toHaveBeenCalledWith(120)
     fireEvent.doubleClick(screen.getByText('100'))
-    fireEvent.change(screen.getByRole('textbox', { name: /escribir valor/ }), { target: { value: '5' } })
-    fireEvent.keyDown(screen.getByRole('textbox', { name: /escribir valor/ }), { key: 'Escape' })
+    fireEvent.change(screen.getByRole('textbox', { name: /type a value/ }), { target: { value: '5' } })
+    fireEvent.keyDown(screen.getByRole('textbox', { name: /type a value/ }), { key: 'Escape' })
     expect(onChange).toHaveBeenCalledTimes(1)
   })
 
@@ -53,7 +53,7 @@ describe('ParamKnob', () => {
   it('a two-state parameter is a switch: click toggles', () => {
     const onChange = vi.fn()
     render(<ParamKnob def={param('D Comp', 'ATTCK')} raw={1} firmware={FW} onChange={onChange} />)
-    fireEvent.click(screen.getByRole('button', { name: /ATTCK: Fast/ }))
+    fireEvent.click(screen.getByRole('switch', { name: /ATTCK: Fast/ }))
     expect(onChange).toHaveBeenCalledWith(0)
   })
 

@@ -36,11 +36,11 @@ export function PedalEditorPage({ connect = connectWebMidi, sessionOptions, live
   }, [phase])
 
   async function start() {
-    setPhase({ kind: 'busy', text: 'Conectando…' })
+    setPhase({ kind: 'busy', text: 'Connecting…' })
     try {
       const c = await connect()
       const session = new PedalSession(c.transport, sessionOptions)
-      const cap = await session.scan((slot) => setPhase({ kind: 'busy', text: `Leyendo ${Math.min(slot + 1, 50)}/50…` }))
+      const cap = await session.scan((slot) => setPhase({ kind: 'busy', text: `Reading ${Math.min(slot + 1, 50)}/50…` }))
       session.startPolling(sessionOptions?.gapMs === 0 ? 20 : 250)
       const patches = cap.patches.map(patchFromDevice)
       const bank = initBank(cap.identity.firmware, patches, cap.patches)
@@ -55,7 +55,6 @@ export function PedalEditorPage({ connect = connectWebMidi, sessionOptions, live
     return (
       <EditorPage
         initial={() => phase.initial}
-        sourceLabel={`PEDAL · fw ${phase.initial.firmware.toFixed(2)}`}
         pedal={phase.session}
         liveDefault={liveDefault}
       />
@@ -67,12 +66,12 @@ export function PedalEditorPage({ connect = connectWebMidi, sessionOptions, live
       <main>
         <h1>MS-60B Edit</h1>
         <p>
-          Conecta el pedal por USB y pulsa <strong>Conectar</strong>. La app lee los 50 patches (unos 9 s): para eso
-          cambia de patch en el pedal y al final vuelve al que tenías activo. Al conectar no escribe nada.
+          Connect the pedal by USB and press <strong>Connect</strong>. The editor reads all 50 patches (about 9 s): to do that it
+          steps through the patches on the pedal and then goes back to the one you had. Connecting writes nothing.
         </p>
-        <p className="muted">Necesita Chrome o Edge, y permiso de MIDI con sysex.</p>
+        <p className="muted">Needs Chrome or Edge, and permission for MIDI with sysex.</p>
         <button className="primary" onClick={start} disabled={phase.kind === 'busy'}>
-          {phase.kind === 'busy' ? phase.text : 'Conectar'}
+          {phase.kind === 'busy' ? phase.text : 'Connect'}
         </button>
         {phase.kind === 'error' && (
           <p className="bad" role="alert">
@@ -80,7 +79,7 @@ export function PedalEditorPage({ connect = connectWebMidi, sessionOptions, live
           </p>
         )}
         <p className="muted">
-          <a href="#/demo">Abrir la demo con datos falsos</a>
+          <a href="#/demo">Open the demo with fake data</a>
         </p>
       </main>
     </div>

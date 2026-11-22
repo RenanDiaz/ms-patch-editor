@@ -52,10 +52,10 @@ export function canSave(p: Patch): SaveCheck {
     const pct = Math.round(total * 100)
     return {
       ok: false,
-      reason: `El patch usa ~${pct}% del DSP (estimado). El pedal no puede procesarlo y mostraría "DSP Full!". Cambia un efecto por uno más liviano o quítalo; los efectos en OFF también consumen DSP.`,
+      reason: `The patch uses ~${pct}% of the DSP (estimated). The pedal can't run it and would show "DSP Full!". Change an effect for a lighter one or remove one; bypassed effects still use DSP.`,
     }
   }
-  if (p.blocks.length === 0 || p.blocks.length > MAX_BLOCKS) return { ok: false, reason: 'La cadena debe tener entre 1 y 4 bloques.' }
+  if (p.blocks.length === 0 || p.blocks.length > MAX_BLOCKS) return { ok: false, reason: 'The chain must have 1 to 4 blocks.' }
   return { ok: true }
 }
 

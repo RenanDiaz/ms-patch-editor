@@ -107,7 +107,7 @@ export function S3WritePage() {
   }
 
   const connect = () =>
-    run('Conectando…', async () => {
+    run('Connecting…', async () => {
       transportRef.current?.close()
       t0.current = performance.now()
       const c = await connectWebMidi()
@@ -116,7 +116,7 @@ export function S3WritePage() {
     })
 
   const doBackup = () =>
-    run('Respaldando 50 patches…', async () => {
+    run('Backing up 50 patches…', async () => {
       const cap = await scanBank(transportRef.current!)
       cap.log.forEach((l) => logRef.current.push(l))
       setBackup(cap)
@@ -125,7 +125,7 @@ export function S3WritePage() {
       const named = cap.patches.findIndex((p) => /^(empty|s3 test)$/i.test(decodePatch60B(p).name))
       const empty = named >= 0 ? named : cap.patches.findIndex((p) => decodePatch60B(p).effects[0].id === 0)
       if (empty >= 0) setSlot(empty)
-      if (cap.identity.version !== '2.10') setError(`Firmware ${cap.identity.version}: las pruebas se prepararon con 2.10.`)
+      if (cap.identity.version !== '2.10') setError(`Firmware ${cap.identity.version}: these tests were prepared for 2.10. Check the results carefully.`)
     })
 
   function download(name: string, body: unknown) {
@@ -141,18 +141,18 @@ export function S3WritePage() {
   async function loadRestoreFile(file: File) {
     try {
       const j = JSON.parse(await file.text()) as { format?: string; patches?: string[] }
-      if (j.format !== 'ms60b-capture/1' || !Array.isArray(j.patches) || j.patches.length !== 50) throw new Error('no es una captura ms60b-capture/1 de 50 patches')
+      if (j.format !== 'ms60b-capture/1' || !Array.isArray(j.patches) || j.patches.length !== 50) throw new Error('not an ms60b-capture/1 capture with 50 patches')
       const patches = j.patches.map((h) => h.split(' ').map((x) => parseInt(x, 16)))
       patches.forEach((p, i) => {
         try {
           decodePatch60B(p)
         } catch {
-          throw new Error(`patch ${i + 1} inválido`)
+          throw new Error(`patch ${i + 1} is invalid`)
         }
       })
       setRestoreFrom({ label: file.name, patches })
     } catch (e) {
-      setError(`Archivo de respaldo: ${(e as Error).message}`)
+      setError(`Backup file: ${(e as Error).message}. Choose another file.`)
     }
   }
 
@@ -173,19 +173,19 @@ export function S3WritePage() {
   const ask = (op: Op) => {
     if (!backup || !testBytes || !base || !restoreBytes) return
     const n = slot + 1
-    if (op === 'test') setPending({ op, bytes: testBytes, approval: writeApproval(slot, testBytes, `Escribir patch de prueba "${TEST_NAME}" en la ranura ${n}`) })
+    if (op === 'test') setPending({ op, bytes: testBytes, approval: writeApproval(slot, testBytes, `Write test patch "${TEST_NAME}" to patch ${n}`) })
     if (op === 'restore')
       setPending({
         op,
         bytes: restoreBytes,
-        approval: writeApproval(slot, restoreBytes, `Restaurar la ranura ${n} a “${decodePatch60B(restoreBytes).name}” desde ${restoreFrom ? restoreFrom.label : 'el respaldo de esta sesión'}`),
+        approval: writeApproval(slot, restoreBytes, `Restore patch ${n} to “${decodePatch60B(restoreBytes).name}” from ${restoreFrom ? restoreFrom.label : 'this session’s backup'}`),
       })
     if (op === 'autosave') setPending({ op, bytes: testBytes, approval: autoSaveApproval(testBytes, slot) })
     if (op === 'prepare' && fourFx)
-      setPending({ op, bytes: fourFx.bytes, approval: writeApproval(slot, fourFx.bytes, `Preparar la ranura ${n}: copia de “${fourFx.name}” (4 efectos) llamada “${TEST_NAME}”`) })
+      setPending({ op, bytes: fourFx.bytes, approval: writeApproval(slot, fourFx.bytes, `Prepare patch ${n}: copy of “${fourFx.name}” (4 effects) named “${TEST_NAME}”`) })
     if (op === 'param' && edits.length) setPending({ op, bytes: base, edits, approval: paramEditApproval(slot, edits) })
     if (op === 'stay')
-      setPending({ op, bytes: testBytes, approval: { ...autoSaveApproval(testBytes, slot), label: `Enviar 0x28 al patch ${n} y quedarse en él (sin Store, sin cambiar de patch)` } })
+      setPending({ op, bytes: testBytes, approval: { ...autoSaveApproval(testBytes, slot), label: `Send 0x28 to patch ${n} and stay on it (no Store, no patch switch)` } })
   }
 
   const describeFx = (bytes: number[]) => {
@@ -209,16 +209,16 @@ export function S3WritePage() {
             const was = before.effects[e.effect].params[0]
             const inBuf = buf.effects[e.effect].params[0] === e.value
             const kept = sto.effects[e.effect].params[0] === e.value
-            return `efecto ${e.effect + 1}: ${was}→${e.value} ${inBuf ? 'aplicado' : 'NO aplicado'} en el buffer, ${kept ? 'GUARDADO' : 'no guardado'} al salir y volver`
+            return `effect ${e.effect + 1}: ${was}→${e.value} ${inBuf ? 'applied' : 'NOT applied'} in the buffer, ${kept ? 'SAVED' : 'not saved'} after leaving and coming back`
           })
-          setResults((rs) => [...rs, { op: p.op, ok: true, text: per.join('; ') + `. Buffer: ${describeFx(r.buffer)} · ranura: ${describeFx(r.stored)}` }])
+          setResults((rs) => [...rs, { op: p.op, ok: true, text: per.join('; ') + `. Buffer: ${describeFx(r.buffer)} · stored patch: ${describeFx(r.stored)}` }])
         } else if (p.op === 'stay') {
           await sendAndStay(ctx(), slot, p.bytes, p.approval)
           setStay({ bytes: p.bytes, backupBefore: backup! })
           leave = false
           setResults((rs) => [
             ...rs,
-            { op: p.op, ok: true, text: 'Enviado; el pedal sigue en este patch. Reinícialo sin tocar nada, luego Conectar y Respaldar: abajo se compara la ranura.' },
+            { op: p.op, ok: true, text: 'Sent; the pedal is still on this patch. Restart the pedal without touching anything, then Connect and Back up: the patch is compared below.' },
           ])
         } else if (p.op === 'autosave') {
           const r = await autoSaveProbe(ctx(), slot, p.bytes, p.approval)
@@ -229,10 +229,10 @@ export function S3WritePage() {
               op: p.op,
               ok: true,
               text: r.persisted
-                ? 'El pedal guardó el 0x28 sin Store: la ranura quedó con el patch de prueba. Restaura la ranura.'
+                ? 'The pedal saved the 0x28 without Store: the patch now holds the test patch. Restore the patch.'
                 : same
-                  ? 'No persistió: la ranura sigue igual al respaldo. El 0x28 solo cambia el buffer.'
-                  : `La ranura no coincide ni con el respaldo ni con la prueba (bytes ${diffOffsets(r.stored, base!).join(', ')}). Restaura la ranura.`,
+                  ? 'Not saved: the patch still matches the backup. 0x28 only changes the buffer.'
+                  : `The patch matches neither the backup nor the test (bytes ${diffOffsets(r.stored, base!).join(', ')}). Restore the patch.`,
             },
           ])
         } else {
@@ -243,8 +243,8 @@ export function S3WritePage() {
               op: p.op,
               ok: r.diff.length === 0,
               text:
-                (r.diff.length === 0 ? 'Lectura idéntica a lo escrito.' : `La lectura difiere en los bytes ${r.diff.join(', ')}.`) +
-                (r.ack ? ` Ack: ${toHex(r.ack)}` : ' Sin ack del pedal.'),
+                (r.diff.length === 0 ? 'Read-back matches what was written.' : `Read-back differs at bytes ${r.diff.join(', ')}.`) +
+                (r.ack ? ` Ack: ${toHex(r.ack)}` : ' No ack from the pedal.'),
             },
           ])
         }
@@ -260,20 +260,20 @@ export function S3WritePage() {
   return (
     <main className="s1">
       <header>
-        <h1>MS-60B · S3 escritura controlada</h1>
+        <h1>MS-60B · S3 controlled write</h1>
         <p className="muted">
-          Escribe solo en la ranura que elijas. Antes respalda los 50 patches (solo lectura) y descarga el respaldo. Cada
-          escritura muestra los bytes exactos y pide confirmación; el transporte solo deja pasar esos bytes, una vez. Al
-          terminar vuelve al patch que estaba activo.
+          Writes only to the patch you choose. First back up all 50 patches (read only) and download the backup. Each
+          write shows the exact bytes and asks you to confirm; the transport lets only those bytes through, once. When it
+          finishes, it switches back to the patch that was active.
         </p>
       </header>
 
       <section className="bar">
-        <button onClick={connect} disabled={!!busy}>1. Conectar</button>
-        <button onClick={doBackup} disabled={!ports || !!busy}>2. Respaldar 50 patches</button>
-        <button onClick={downloadBackup} disabled={!backup}>3. Descargar respaldo</button>
+        <button onClick={connect} disabled={!!busy}>1. Connect</button>
+        <button onClick={doBackup} disabled={!ports || !!busy}>2. Back up 50 patches</button>
+        <button onClick={downloadBackup} disabled={!backup}>3. Download backup</button>
         <span className="status" role="status">
-          {busy ?? (ports ? `Conectado: ${ports}` : 'Sin conectar')}
+          {busy ?? (ports ? `Connected: ${ports}` : 'Not connected')}
           {error && <span className="bad"> · {error}</span>}
         </span>
       </section>
@@ -281,11 +281,11 @@ export function S3WritePage() {
       {backup && (
         <section className="s3-step">
           <p className="muted">
-            Firmware {backup.identity.version} · patch activo: {backup.originalProgram + 1}
-            {!downloaded && <strong className="bad"> · descarga el respaldo para habilitar las escrituras</strong>}
+            Firmware {backup.identity.version} · active patch: {backup.originalProgram + 1}
+            {!downloaded && <strong className="bad"> · download the backup to enable writes</strong>}
           </p>
           <label>
-            Ranura de prueba:{' '}
+            Test patch:{' '}
             <select value={slot} onChange={(e) => setSlot(Number(e.target.value))} disabled={!!busy}>
               {backup.patches.map((p, i) => (
                 <option key={i} value={i}>
@@ -295,48 +295,48 @@ export function S3WritePage() {
             </select>
           </label>
           <p>
-            Prueba: renombrar “{base && decodePatch60B(base).name}” a “{TEST_NAME}” y alternar ON/OFF del efecto 1. Bytes
-            que cambian: {diff.join(', ')}.
+            Test: rename “{base && decodePatch60B(base).name}” to “{TEST_NAME}” and toggle effect 1 ON/OFF. Bytes
+            that change: {diff.join(', ')}.
           </p>
           <p>
             <label className="file">
-              Restaurar desde archivo (opcional)
+              Restore from file (optional)
               <input type="file" accept=".json" onChange={(e) => e.target.files?.[0] && loadRestoreFile(e.target.files[0])} />
             </label>{' '}
-            Restaurar escribe “{restoreBytes && decodePatch60B(restoreBytes).name}” desde{' '}
-            {restoreFrom ? restoreFrom.label : 'el respaldo de esta sesión'}.
+            Restore writes “{restoreBytes && decodePatch60B(restoreBytes).name}” from{' '}
+            {restoreFrom ? restoreFrom.label : 'this session’s backup'}.
             {restoreFrom && (
-              <> Ranuras del pedal distintas al archivo: {changedVsFile.length ? changedVsFile.map((i) => i + 1).join(', ') : 'ninguna'}.</>
+              <> Pedal patches that differ from the file: {changedVsFile.length ? changedVsFile.map((i) => i + 1).join(', ') : 'none'}.</>
             )}
           </p>
           <div className="bar">
-            <button onClick={() => ask('test')} disabled={!canWrite}>4. Escribir prueba (0x28 + 0x32)…</button>
-            <button onClick={() => ask('restore')} disabled={!canWrite}>5. Restaurar ranura desde respaldo…</button>
-            <button onClick={() => ask('autosave')} disabled={!canWrite}>Opcional: prueba solo 0x28, sin Store…</button>
+            <button onClick={() => ask('test')} disabled={!canWrite}>4. Write test (0x28 + 0x32)…</button>
+            <button onClick={() => ask('restore')} disabled={!canWrite}>5. Restore patch from backup…</button>
+            <button onClick={() => ask('autosave')} disabled={!canWrite}>Optional: test 0x28 only, no Store…</button>
             <button onClick={() => download(`ms60b-s3-log-${stamp()}.json`, { format: 'ms60b-s3-log/1', slot, results, log: logJson() })}>
-              Descargar log
+              Download log
             </button>
           </div>
-          <h3>Escucha en vivo (pruebas aprobadas el 2026-11-10)</h3>
+          <h3>Live listening (tests approved on 2026-11-10)</h3>
           <div className="bar">
             <button onClick={() => ask('prepare')} disabled={!canWrite || !fourFx}>
-              A. Preparar ranura con 4 efectos{fourFx ? ` (copia de ${fourFx.name})` : ''}…
+              A. Prepare patch with 4 effects{fourFx ? ` (copy of ${fourFx.name})` : ''}…
             </button>
             <button onClick={() => ask('param')} disabled={!canWrite || edits.length === 0}>
-              B. Probar 0x31 en {edits.length} efecto(s)…
+              B. Test 0x31 on {edits.length} effect(s)…
             </button>
-            <button onClick={() => ask('stay')} disabled={!canWrite}>C. Enviar 0x28 y quedarse…</button>
+            <button onClick={() => ask('stay')} disabled={!canWrite}>C. Send 0x28 and stay…</button>
           </div>
-          {base && <p className="muted">Ranura ahora (efecto:perilla 1): {describeFx(base)}</p>}
+          {base && <p className="muted">Patch now (effect:knob 1): {describeFx(base)}</p>}
           {stay && stay.backupBefore !== backup && base && (
             <p>
-              Prueba C, después del nuevo respaldo: la ranura{' '}
+              Test C, after the new backup: the patch{' '}
               <strong>
                 {diffOffsets(base, stay.bytes).length === 0
-                  ? 'TIENE lo enviado (el 0x28 se guardó sin salir del patch)'
+                  ? 'HAS what was sent (the 0x28 was saved without leaving the patch)'
                   : diffOffsets(base, stay.backupBefore.patches[slot]).length === 0
-                    ? 'tiene lo de antes (el 0x28 no se guardó)'
-                    : 'no coincide con lo enviado ni con lo de antes'}
+                    ? 'has what it had before (the 0x28 was not saved)'
+                    : 'matches neither what was sent nor what it had before'}
               </strong>
               .
             </p>
@@ -356,7 +356,7 @@ export function S3WritePage() {
       {pending && <ConfirmWrite pending={pending} onYes={confirm} onNo={() => setPending(null)} />}
 
       <details>
-        <summary>Log ({logView.length} mensajes)</summary>
+        <summary>Log ({logView.length} messages)</summary>
         <pre>{logView.slice(-60).map((l) => `${Math.round(l.t)} ${l.dir} ${toHex(l.bytes)}`).join('\n')}</pre>
       </details>
     </main>
@@ -372,11 +372,11 @@ function ConfirmWrite({ pending, onYes, onNo }: { pending: Pending; onYes: () =>
   return (
     <dialog ref={ref} className="s3-confirm" onCancel={onNo} aria-labelledby="s3-confirm-title">
       <h2 id="s3-confirm-title">{pending.approval.label}</h2>
-      <p>Se enviarán exactamente estos mensajes de escritura (además de Program Change y lecturas):</p>
+      <p>These exact write messages will be sent (plus Program Change and reads):</p>
       <pre>{pending.approval.writes.map((w) => toHex(w)).join('\n\n')}</pre>
       <div className="bar">
-        <button onClick={onYes}>Sí, escribir</button>
-        <button onClick={onNo}>Cancelar</button>
+        <button onClick={onYes}>Yes, write</button>
+        <button onClick={onNo}>Cancel</button>
       </div>
     </dialog>
   )

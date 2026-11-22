@@ -7,7 +7,7 @@ import { S1ReadPage } from './ui/S1ReadPage'
 import { S3WritePage } from './ui/S3WritePage'
 
 /**
- * Default → editor on the real pedal (read-only for now). #/demo → editor with FAKE data (S2).
+ * Default → editor on the real pedal. #/demo → editor with FAKE data (S2).
  * #/s1 → S1 read page. #/s3 → S3 controlled write (one slot, confirmed).
  */
 export default function App() {
@@ -19,6 +19,6 @@ export default function App() {
   }, [])
   if (hash === '#/s1') return <S1ReadPage />
   if (hash === '#/s3') return <S3WritePage />
-  if (hash === '#/demo') return <EditorPage initial={() => initBank(FAKE_FIRMWARE, fakeBank())} sourceLabel="DATOS FALSOS" />
+  if (hash === '#/demo') return <EditorPage initial={() => initBank(FAKE_FIRMWARE, fakeBank())} />
   return <PedalEditorPage />
 }

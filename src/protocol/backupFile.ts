@@ -41,16 +41,16 @@ export function parseBackupJson(text: string): BankBackup {
   try {
     j = JSON.parse(text)
   } catch {
-    throw new BackupFileError('el archivo no es JSON')
+    throw new BackupFileError('the file is not JSON')
   }
-  if (j.format !== BACKUP_FORMAT) throw new BackupFileError(`formato desconocido (se esperaba ${BACKUP_FORMAT})`)
-  if (!Array.isArray(j.patches) || j.patches.length !== PATCH_SLOTS) throw new BackupFileError(`debe tener ${PATCH_SLOTS} patches`)
+  if (j.format !== BACKUP_FORMAT) throw new BackupFileError(`unknown format (expected ${BACKUP_FORMAT})`)
+  if (!Array.isArray(j.patches) || j.patches.length !== PATCH_SLOTS) throw new BackupFileError(`it must have ${PATCH_SLOTS} patches`)
   const patches = j.patches.map((h, i) => {
     const bytes = typeof h === 'string' ? h.trim().split(/\s+/).map((x) => parseInt(x, 16)) : []
     try {
       decodePatch60B(bytes)
     } catch {
-      throw new BackupFileError(`el patch ${i + 1} no es válido`)
+      throw new BackupFileError(`patch ${i + 1} is not valid`)
     }
     return bytes
   })

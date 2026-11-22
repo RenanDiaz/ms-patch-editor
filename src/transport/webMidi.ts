@@ -17,14 +17,14 @@ export interface WebMidiConnection {
  */
 export async function connectWebMidi(): Promise<WebMidiConnection> {
   if (!('requestMIDIAccess' in navigator)) {
-    throw new MidiUnavailableError('Web MIDI no está disponible en este navegador. Usa Chrome o Edge.')
+    throw new MidiUnavailableError('Web MIDI is not available in this browser. Use Chrome or Edge.')
   }
   const access = await navigator.requestMIDIAccess({ sysex: true })
   const input = [...access.inputs.values()].find((p) => p.name?.startsWith(ZOOM_PORT_PREFIX))
   const output = [...access.outputs.values()].find((p) => p.name?.startsWith(ZOOM_PORT_PREFIX))
   if (!input || !output) {
     const names = [...access.inputs.values(), ...access.outputs.values()].map((p) => p.name).join(', ') || 'ninguno'
-    throw new MidiUnavailableError(`No se encontró el puerto "${ZOOM_PORT_PREFIX}". Puertos vistos: ${names}`)
+    throw new MidiUnavailableError(`Port "${ZOOM_PORT_PREFIX}" not found. Is the pedal connected by USB? Ports seen: ${names}`)
   }
 
   const listeners = new Set<(m: MidiMessage) => void>()

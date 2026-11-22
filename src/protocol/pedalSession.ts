@@ -19,7 +19,7 @@ export class WrongPatchError extends Error {
   readonly expected: number
   readonly actual: number
   constructor(expected: number, actual: number) {
-    super(`El pedal está en el patch ${actual + 1}, no en el ${expected + 1}: no se envió nada.`)
+    super(`The pedal is on patch ${actual + 1}, not ${expected + 1}: nothing was sent.`)
     this.expected = expected
     this.actual = actual
   }
@@ -35,7 +35,7 @@ if (import.meta.hot) {
 
 export class SessionClosedError extends Error {
   constructor() {
-    super('La conexión con el pedal se cerró: vuelve a conectar.')
+    super('The connection to the pedal was closed. Connect again.')
   }
 }
 
@@ -157,7 +157,7 @@ export class PedalSession {
    * Live listening: sends 0x28 / 0x31 messages to the active patch's edit
    * buffer. The pedal keeps them in the slot only when leaving the patch.
    */
-  sendLive(slot: number, messages: readonly Uint8Array[], label = 'Escucha en vivo'): Promise<void> {
+  sendLive(slot: number, messages: readonly Uint8Array[], label = 'Live'): Promise<void> {
     if (messages.length === 0) return Promise.resolve()
     return this.exclusive(async () => {
       // The edit buffer belongs to whatever patch the pedal is on: confirm it is `slot` first.
@@ -200,7 +200,7 @@ export class PedalSession {
   emergencyRestore(slot: number, bytes: ArrayLike<number>) {
     if (this.closed || this.activeProgram !== slot) return
     const m = Uint8Array.from(bytes)
-    withApprovedWrites(this.raw, { label: 'Restaurar al cerrar', writes: [m] }).send(m)
+    withApprovedWrites(this.raw, { label: 'Restore on close', writes: [m] }).send(m)
   }
 
   /**

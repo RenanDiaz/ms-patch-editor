@@ -30,8 +30,8 @@ async function connected(opts: { live?: boolean; pedal?: ReturnType<typeof fakeP
       connect={async () => ({ transport: pedal.transport, inputName: 'ZOOM MS Series', outputName: 'ZOOM MS Series' })}
     />,
   )
-  fireEvent.click(screen.getByRole('button', { name: 'Conectar' }))
-  await screen.findByText(/PEDAL · fw 2.10/)
+  fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
+  await screen.findByText(/MS-60B · firmware 2.10 · USB/)
   pedal.sent.length = 0
   return { pedal, view }
 }
@@ -39,9 +39,12 @@ async function connected(opts: { live?: boolean; pedal?: ReturnType<typeof fakeP
 /** First knob of effect 1 (BassDrive); the app opens the patch on the pedal's selected effect, so select it first. */
 const firstKnob = () => {
   const b = screen.getAllByRole('button', { name: 'BassDrive' }).find((x) => x.classList.contains('block-name'))!
-  if (!screen.getByRole('heading', { level: 2 }).textContent?.startsWith('1.')) fireEvent.click(b)
+  if (!screen.queryByLabelText('Block 1')) fireEvent.click(b)
   return screen.getAllByRole('slider')[0]
 }
+/** The "N unsaved changes" pill shows a number (vs "No unsaved changes"). */
+const dirtyShown = () => /^\d+ unsaved/.test(document.querySelector('.pill.dirty')?.textContent ?? '')
+const openBankMenu = () => fireEvent.click(screen.getByRole('button', { name: /^Bank/ }))
 const settle = () => act(() => new Promise((r) => setTimeout(r, 150)))
 
 describe('live listening (simulated pedal)', () => {
@@ -56,7 +59,7 @@ describe('live listening (simulated pedal)', () => {
 
   it('bypass is sent as a whole patch (0x28)', async () => {
     const { pedal } = await connected()
-    fireEvent.click(screen.getByRole('button', { name: /BassDrive activo/ }))
+    fireEvent.click(screen.getByRole('button', { name: /BassDrive: on/ }))
     await waitFor(() => expect(writes(pedal.sent).map((m) => m[4])).toEqual([0x28]))
     expect(decodePatch60B(pedal.buffer).effects[0].on).toBe(false)
   })
@@ -66,7 +69,7 @@ describe('live listening (simulated pedal)', () => {
     fireEvent.keyDown(firstKnob(), { key: 'ArrowUp' })
     await waitFor(() => expect(writes(pedal.sent).length).toBe(1))
     fireEvent.click(screen.getByRole('button', { name: new RegExp(`^06\\s*${nameOf(5)}`) }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Descartar', hidden: true }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Revert and open 06', hidden: true }))
     await waitFor(() => expect(pedal.program).toBe(5))
     await waitFor(() => expect(readPending()).toBeNull())
     expect(pedal.memory[active]).toEqual(original[active])
@@ -75,10 +78,10 @@ describe('live listening (simulated pedal)', () => {
   it('Save writes the edited patch with Store and leaves it clean', async () => {
     const { pedal } = await connected()
     fireEvent.keyDown(firstKnob(), { key: 'ArrowUp' })
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Guardar' })).toBeEnabled())
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Save to/ })).toBeEnabled())
     await settle()
-    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }))
-    await waitFor(() => expect(screen.queryByText('sin guardar')).not.toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /^Save to/ }))
+    await waitFor(() => expect(dirtyShown()).toBe(false))
     expect(decodePatch60B(pedal.memory[active]).effects[0].params[0]).toBe(15)
     expect(writes(pedal.sent).map((m) => m[4])).toContain(0x32)
     expect(readPending()).toBeNull()
@@ -88,8 +91,8 @@ describe('live listening (simulated pedal)', () => {
     const { pedal } = await connected()
     fireEvent.keyDown(firstKnob(), { key: 'ArrowUp' })
     await waitFor(() => expect(writes(pedal.sent).length).toBe(1))
-    fireEvent.click(screen.getByRole('button', { name: 'Revertir' }))
-    await waitFor(() => expect(screen.queryByText('sin guardar')).not.toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Revert' }))
+    await waitFor(() => expect(dirtyShown()).toBe(false))
     expect(pedal.buffer).toEqual(original[active])
     expect(readPending()).toBeNull()
   })
@@ -103,7 +106,7 @@ describe('live listening (simulated pedal)', () => {
     await waitFor(() => expect(pedal.memory[active]).toEqual(original[active]))
     await waitFor(() => expect(pedal.program).toBe(5))
     expect(screen.getAllByText(nameOf(5)).length).toBeGreaterThan(0)
-    expect(screen.getByLabelText('cambios sin guardar')).toBeInTheDocument() // 28 still edited in the app
+    expect(screen.getByLabelText('unsaved changes')).toBeInTheDocument() // 28 still edited in the app
   })
 
   it('a knob turned on the pedal becomes part of the edit', async () => {
@@ -116,16 +119,16 @@ describe('live listening (simulated pedal)', () => {
     )
     act(() => pedal.turnKnob(0, 2, 3, next))
     await waitFor(() => expect(firstKnob()).toHaveAttribute('aria-valuenow', '3'), { timeout: 2000 })
-    expect(screen.getByText('sin guardar')).toBeInTheDocument()
+    expect(dirtyShown()).toBe(true)
   })
 
   it('switching live off puts the original back in the buffer', async () => {
     const { pedal } = await connected()
     fireEvent.keyDown(firstKnob(), { key: 'ArrowUp' })
     await waitFor(() => expect(writes(pedal.sent).length).toBe(1))
-    fireEvent.click(screen.getByLabelText(/En vivo/))
+    fireEvent.click(screen.getByRole('button', { name: 'Live' }))
     await waitFor(() => expect(pedal.buffer).toEqual(original[active]))
-    expect(screen.getByText('sin guardar')).toBeInTheDocument()
+    expect(dirtyShown()).toBe(true)
   })
 
   it('after an abrupt close with live changes, the next connection offers to restore the slot', async () => {
@@ -136,8 +139,8 @@ describe('live listening (simulated pedal)', () => {
     first.view.unmount()
     act(() => pedal.selectOnPedal(5)) // nobody restores: slot 28 keeps the edit
     await connected({ pedal })
-    expect(await screen.findByText(/pudo quedar con cambios sin guardar/)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Restaurar' }))
+    expect(await screen.findByText(/may still hold unsaved live edits/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Restore the original', hidden: true }))
     await waitFor(() => expect(pedal.memory[active]).toEqual(original[active]))
     await waitFor(() => expect(readPending()).toBeNull())
   })
@@ -147,7 +150,7 @@ describe('pedal selection (simulated)', () => {
   it('opens the patch on the effect the pedal has selected', async () => {
     await connected()
     const focus = decodePatch60B(original[active]).focus
-    expect(screen.getByRole('heading', { level: 2 }).textContent).toMatch(new RegExp(`^${focus + 1}\\.`))
+    expect(screen.getByLabelText(`Block ${focus + 1}`)).toBeInTheDocument()
   })
 
   it('a change made on the pedal that it does not announce is picked up by re-reading its buffer', async () => {
@@ -158,8 +161,8 @@ describe('pedal selection (simulated)', () => {
     const edited = Array.from(encodePatch60B(pedal.buffer, { name: d.name, effects: d.effects.slice(0, d.maxFx).map((e, i) => (i === 3 ? { ...e, on: !e.on } : e)) }))
     pedal.silentEdit(edited)
     pedal.sent.length = 0
-    await waitFor(() => expect(screen.getByText('sin guardar')).toBeInTheDocument(), { timeout: 3000 })
-    expect(screen.getByRole('button', { name: /RackComp (activo|en bypass)/ })).toHaveAttribute('aria-pressed', String(!d.effects[3].on))
+    await waitFor(() => expect(dirtyShown()).toBe(true), { timeout: 3000 })
+    expect(screen.getByRole('button', { name: /RackComp: (on|bypassed)/ })).toHaveAttribute('aria-pressed', String(!d.effects[3].on))
   })
 })
 
@@ -167,14 +170,14 @@ describe('rename on the pedal (simulated)', () => {
   it('live: the new name goes to the buffer as a 0x28; Save keeps it', async () => {
     const { pedal } = await connected()
     fireEvent.click(screen.getByRole('button', { name: nameOf(active) }))
-    const input = screen.getByRole('textbox', { name: 'Nombre del patch' })
+    const input = screen.getByRole('textbox', { name: 'Patch name' })
     fireEvent.change(input, { target: { value: 'Mi Fuzz' } })
     fireEvent.keyDown(input, { key: 'Enter' })
     await waitFor(() => expect(decodePatch60B(pedal.buffer).name).toBe('Mi Fuzz'))
     expect(writes(pedal.sent).map((m) => m[4])).toEqual([0x28])
     await settle()
-    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }))
-    await waitFor(() => expect(screen.queryByText('sin guardar')).not.toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /^Save to/ }))
+    await waitFor(() => expect(dirtyShown()).toBe(false))
     expect(decodePatch60B(pedal.memory[active]).name).toBe('Mi Fuzz')
   })
 })
@@ -195,17 +198,18 @@ describe('bank backup and restore (simulated pedal)', () => {
     return texts
   }
 
-  it('Respaldar banco re-reads the pedal and downloads a backup file of what it holds', async () => {
+  it('Back up bank re-reads the pedal and downloads a backup file of what it holds', async () => {
     const texts = mockDownloads()
     const { pedal } = await connected()
-    fireEvent.click(screen.getByRole('button', { name: 'Respaldar banco' }))
+    openBankMenu()
+    fireEvent.click(screen.getByRole('menuitem', { name: /Back up bank/ }))
     await waitFor(() => expect(texts).toHaveLength(1))
     const { parseBackupJson } = await import('../protocol/backupFile')
     expect(parseBackupJson(texts[0]).patches).toEqual(pedal.memory)
     expect(writes(pedal.sent)).toEqual([])
   })
 
-  it('Restaurar banco writes only the chosen slots that differ, verifies them and returns to the active patch', async () => {
+  it('Restore bank writes only the chosen slots that differ, verifies them and returns to the active patch', async () => {
     mockDownloads()
     const { pedal } = await connected()
     const backup = { ...cap, patches: cap.patches.map((h, i) => (i === 32 ? cap.patches[6] : i === 10 ? cap.patches[7] : h)) }
@@ -216,8 +220,8 @@ describe('bank backup and restore (simulated pedal)', () => {
     expect(dialog.textContent).toMatch(/11.*Phase/)
     // Keep slot 11 as it is: write only 33.
     fireEvent.click(within(dialog).getAllByRole('checkbox', { hidden: true })[0]) // slot 11 is listed first
-    fireEvent.click(screen.getByRole('button', { name: /Escribir 1 ranura/, hidden: true }))
-    await waitFor(() => expect(screen.getByText(/1 de 1 ranuras restauradas y verificadas/)).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /Restore 1 patch/, hidden: true }))
+    await waitFor(() => expect(screen.getByText(/1 of 1 patches restored and checked/)).toBeInTheDocument())
     expect(pedal.memory[32]).toEqual(original[6])
     expect(pedal.memory[10]).toEqual(original[10])
     expect(writes(pedal.sent).filter((m) => m[4] === 0x32).map((m) => m[8])).toEqual([32])
@@ -229,25 +233,26 @@ describe('bank backup and restore (simulated pedal)', () => {
     const { pedal } = await connected()
     fireEvent.keyDown(firstKnob(), { key: 'ArrowUp' })
     await settle()
-    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }))
-    await waitFor(() => expect(screen.queryByText('sin guardar')).not.toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /^Save to/ }))
+    await waitFor(() => expect(dirtyShown()).toBe(false))
     const input = document.querySelector('input[type=file]') as HTMLInputElement
     fireEvent.change(input, { target: { files: [new File([JSON.stringify(cap)], 'orig.json', { type: 'application/json' })] } })
     const dialog = await screen.findByRole('dialog', { hidden: true })
-    fireEvent.click(within(dialog).getByRole('button', { name: /Escribir 1 ranura/, hidden: true }))
-    await waitFor(() => expect(within(dialog).getByText(/1 de 1 ranuras restauradas/)).toBeInTheDocument())
+    fireEvent.click(within(dialog).getByRole('button', { name: /Restore 1 patch/, hidden: true }))
+    await waitFor(() => expect(within(dialog).getByText(/1 of 1 patches restored/)).toBeInTheDocument())
     expect(pedal.memory[active]).toEqual(original[active])
     await act(() => new Promise((r) => setTimeout(r, 1300))) // let the buffer poll run
     expect(readPending()).toBeNull()
-    expect(screen.queryByText('sin guardar')).not.toBeInTheDocument()
+    expect(dirtyShown()).toBe(false)
   })
 
   it('refuses to back up or restore while there are unsaved changes', async () => {
     mockDownloads()
     const { pedal } = await connected({ live: false })
-    fireEvent.click(screen.getByRole('button', { name: /BassDrive activo/ }))
-    fireEvent.click(screen.getByRole('button', { name: 'Respaldar banco' }))
-    expect(await screen.findByText(/Guarda o revierte primero/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /BassDrive: on/ }))
+    openBankMenu()
+    fireEvent.click(screen.getByRole('menuitem', { name: /Back up bank/ }))
+    expect(await screen.findByText(/Save or revert the patches/)).toBeInTheDocument()
     expect(writes(pedal.sent)).toEqual([])
   })
 })
@@ -255,19 +260,19 @@ describe('bank backup and restore (simulated pedal)', () => {
 describe('live listening off (simulated pedal)', () => {
   it('sends nothing while editing; a knob turned on the pedal with unsaved changes is a conflict', async () => {
     const { pedal } = await connected({ live: false })
-    fireEvent.click(screen.getByRole('button', { name: /BassDrive activo/ }))
+    fireEvent.click(screen.getByRole('button', { name: /BassDrive: on/ }))
     await settle()
     expect(writes(pedal.sent)).toEqual([])
     act(() => pedal.turnKnob(0, 2, 10))
-    expect(await screen.findByText(/Conflicto en 28/, {}, { timeout: 2000 })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Usar la del pedal' }))
-    await waitFor(() => expect(screen.queryByText('sin guardar')).not.toBeInTheDocument())
+    expect(await screen.findByText(/Patch 28 was changed on the pedal/, {}, { timeout: 2000 })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: "Use the pedal's version", hidden: true }))
+    await waitFor(() => expect(dirtyShown()).toBe(false))
   })
 
   it('a patch change on the pedal is shown in the header, the app stays', async () => {
     const { pedal } = await connected({ live: false })
     act(() => pedal.selectOnPedal(4))
-    expect(await screen.findByText(/pedal en 05/)).toBeInTheDocument()
+    expect(await screen.findByText((_, el) => !!el?.classList.contains('now-sub') && /The pedal is on 05/.test(el.textContent ?? ''))).toBeInTheDocument()
     expect(screen.getAllByText(nameOf(active)).length).toBeGreaterThan(0)
   })
 })

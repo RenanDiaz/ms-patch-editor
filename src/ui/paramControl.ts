@@ -13,8 +13,26 @@ export interface ParamScale {
   label: (raw: number) => string
 }
 
+/**
+ * Tempo-synced values come from g200kg's table as musical note symbols
+ * (U+1D15E-1D161), which most fonts cannot draw (the usability test saw a
+ * blank box). Shown as text instead: 1/16, 1/8, 1/4, 1/2; "3" = triplet (T),
+ * "." = dotted (D), "x2" = times two (×2). Same values, only the writing.
+ */
+const NOTES: Record<string, string> = { '\u{1D15E}': '1/2', '\u{1D15F}': '1/4', '\u{1D160}': '1/8', '\u{1D161}': '1/16' }
+export function readableLabel(text: string): string {
+  const m = /^([\u{1D15E}-\u{1D161}])\s*(3|\.|x\d+)?$/u.exec(text)
+  if (!m) return text
+  const note = NOTES[m[1]]
+  const mod = m[2]
+  if (!mod) return note
+  if (mod === '3') return `${note}T`
+  if (mod === '.') return `${note}D`
+  return `${note} ×${mod.slice(1)}`
+}
+
 export function paramScale(def: ParamDef, firmware: number): ParamScale {
-  const label = (raw: number) => formatParam(def, raw, firmware)
+  const label = (raw: number) => readableLabel(formatParam(def, raw, firmware))
   if (def.range.kind === 'cab') {
     const values = bassCabTable(firmware).values
     return {
