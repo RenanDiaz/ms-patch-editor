@@ -103,6 +103,7 @@ export function TypePicker({ title, firmware, current, dspUsedByOthers, onPick, 
                 </span>
                 {q && <span className="pick-cat">{e.category}</span>}
                 <span className="pick-dsp">
+                  <span className="sr-only">DSP </span>
                   {(dspShare(e.id) * 100).toFixed(0)}%{!ok && <span className="pick-over"> won't fit</span>}
                 </span>
               </button>

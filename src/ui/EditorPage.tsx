@@ -28,6 +28,7 @@ import { categoryVar } from './categoryColor'
 import { changeLine, pad2 } from './changeText'
 import {
   ChainSquares,
+  chainText,
   ClipboardBar,
   ConfirmDialog,
   ConflictDialog,
@@ -76,6 +77,15 @@ export function EditorPage({ initial, pedal, liveDefault = true }: Props) {
   const [notice, setNotice] = useState<string | null>(null)
   const [confirmRevert, setConfirmRevert] = useState(false)
   const [bankOpen, setBankOpen] = useState(false)
+  // Escape closes the Bank menu wherever the focus is (found in a real test: it only worked inside the menu).
+  useEffect(() => {
+    if (!bankOpen) return
+    const h = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setBankOpen(false)
+    }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [bankOpen])
   const restoreInput = useRef<HTMLInputElement>(null)
   const changesRef = useRef<HTMLElement>(null)
   const dragFrom = useRef<number | null>(null)
@@ -415,7 +425,7 @@ export function EditorPage({ initial, pedal, liveDefault = true }: Props) {
             {bankOpen && (
               <>
                 <div className="menu-scrim" onClick={() => setBankOpen(false)} />
-                <div className="menu" role="menu" aria-label="Bank" onKeyDown={(e) => e.key === 'Escape' && setBankOpen(false)}>
+                <div className="menu" role="menu" aria-label="Bank">
                   <button role="menuitem" onClick={() => void backupNow()} disabled={!pedal || busy}>
                     Back up bank to file…
                     <small>Reads all 50 patches and downloads them</small>
@@ -470,6 +480,14 @@ export function EditorPage({ initial, pedal, liveDefault = true }: Props) {
                 <button
                   className={i === state.current ? 'current' : ''}
                   aria-current={i === state.current ? 'true' : undefined}
+                  aria-label={[
+                    `${pad2(i + 1)} ${s.working.name || 'unnamed'}`,
+                    pedal && pedalAt === i ? 'the pedal is on this patch' : '',
+                    isDirty(s) ? 'unsaved changes' : '',
+                    `chain: ${chainText(s.working)}`,
+                  ]
+                    .filter(Boolean)
+                    .join(', ')}
                   onClick={() => dispatch({ type: 'selectPatch', index: i })}
                 >
                   <span className="num">{pad2(i + 1)}</span>

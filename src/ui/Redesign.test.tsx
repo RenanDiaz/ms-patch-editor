@@ -102,6 +102,29 @@ describe('keyboard shortcuts', () => {
   })
 })
 
+describe('Nancho Bass report fixes', () => {
+  it('Escape closes the Bank menu even when focus is outside it', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: /Bank/ }))
+    expect(screen.getByRole('menu', { name: 'Bank' })).toBeInTheDocument()
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(screen.queryByRole('menu', { name: 'Bank' })).not.toBeInTheDocument()
+  })
+
+  it('patch list buttons say number, name and chain to screen readers', () => {
+    render(<App />)
+    expect(screen.getByRole('button', { name: /^02 FAKE Drive, .*chain: OptComp, BassDrive, Ba Chorus \(bypass\), Delay/ })).toBeInTheDocument()
+  })
+
+  it('list labels write the unit as Hz ("200hz" in the source data)', async () => {
+    const { formatParam } = await import('../protocol/describe')
+    const { CATALOG } = await import('../model/catalog')
+    const def = CATALOG.flatMap((e) => e.params).find((p) => Array.isArray(p.disp) && (p.disp as string[]).includes('200hz'))!
+    const i = (def.disp as string[]).indexOf('200hz')
+    expect(formatParam(def, i, 2.1)).toBe('200Hz')
+  })
+})
+
 describe('patch name limit', () => {
   it('a full name field refuses more keys and says why (found in a real test)', () => {
     render(<App />)

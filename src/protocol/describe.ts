@@ -32,7 +32,8 @@ export function formatParam(def: ParamDef, raw: number, firmware: number): strin
     if (r !== undefined && r > 0) return r < 1 ? (v * r + d).toFixed(1) : String(v * r + d)
     return String(v + d)
   }
-  if (Array.isArray(d)) return d[v] ?? `? (${raw})`
+  // Some g200kg labels write "200hz"; show the unit as "Hz" like the others (display only, data unchanged).
+  if (Array.isArray(d)) return d[v] !== undefined ? d[v].replace(/(\d)\s*hz$/i, '$1Hz').replace(/(\d)\s*khz$/i, '$1kHz') : `? (${raw})`
   if (d && 'kind' in d && d.kind === 'time') {
     v = raw + d.min
     return v >= d.max ? (d.list[v - d.max] ?? `? (${raw})`) : String(v)

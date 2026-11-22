@@ -30,8 +30,11 @@ export function Modal(props: { className?: string; labelledBy: string; onCancel:
 }
 
 /** A patch's chain as small colored squares; bypassed blocks are hollow. */
+/** The chain as words, e.g. "M Comp, SVT (bypass)", for labels and tooltips. */
+export const chainText = (patch: Patch) => patch.blocks.map((b) => `${effectName(b.effectId)}${b.on ? '' : ' (bypass)'}`).join(', ')
+
 export function ChainSquares({ patch, label }: { patch: Patch; label?: boolean }) {
-  const text = patch.blocks.map((b) => `${effectName(b.effectId)}${b.on ? '' : ' (bypass)'}`).join(', ')
+  const text = chainText(patch)
   return (
     <span className="squares" aria-label={label ? `Chain: ${text}` : undefined} title={text}>
       {patch.blocks.map((b, i) => (
