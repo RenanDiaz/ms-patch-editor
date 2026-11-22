@@ -277,3 +277,15 @@ Prueba aprobada por el usuario en la ranura 33 (copia de "Octaver" con 4 efectos
   - la restauración de emergencia al cerrar la página solo actúa sobre el patch que la app sabe que está activo.
 
   Con la aprobación del usuario, la ranura 32 se restauró desde la captura de S1 (relectura idéntica, ack). Después, una lectura completa del banco coincidió con la captura de S1 en todas las ranuras salvo la 20, que el usuario cambió con la utilidad de g200kg antes de S3.
+
+### 9.5 AMP de firmware 2: bytes de gabinete y "v2" (2026-11-22)
+
+Verificación de solo lectura (`0x33` + `0x29`, botón "Leer patch activo" de `#/s1`), ejecutada por Claude en el Chrome del usuario. El usuario armó el patch en el propio pedal, en la ranura 33: efecto 1 = SuperB (firmware 2). Para cada lectura, `checkAmpBytes` (`src/protocol/ampCheck.ts`) decodifica los bytes del pedal, los vuelve a codificar reescribiendo todas las ranuras y compara.
+
+| CAB (valor) | Byte de gabinete pedal / app | Byte v2 pedal / app | Resto del patch |
+|---|---|---|---|
+| SWR 4x10 (64) | `0x51` / `0x51` | `0x20` / `0x20` | idéntico |
+| AG 8x10 (16) | `0x50` / `0x50` | `0x20` / `0x20` | idéntico |
+| OFF (0) | `0x00` / `0x00` | `0x20` / `0x20` | idéntico |
+
+Confirma las reglas de `MakeBin` que porta `encodePatch60B`: byte de gabinete `0x00` / `0x50` / `0x51` según el CAB, y byte v2 = `0x20` en los AMP de firmware 2. Los AMP de firmware 1 ya estaban confirmados con los 50 patches reales (§8, test `ampCheck.test.ts`). No se probaron los demás AMP de firmware 2 (G-Krueger, Heaven, SMR, Flip Top, Monotone); en `effectslist.js` comparten la misma regla.
