@@ -130,3 +130,8 @@ Todos sin escrituras, salvo S3, que usa un patch de prueba respaldado antes.
 - **Escrituras:** pegar es una edición más del patch de trabajo. Con escucha en vivo se envía al pedal (`0x28`) y se revierte si no se guarda; solo Guardar la deja permanente. No hace falta una aprobación aparte.
 - **DSP:** si el pegado excede la capacidad estimada, Guardar se bloquea con la explicación, como con cualquier otro cambio.
 - **Efectos repetidos: verificado (2026-11-22).** Con aprobación del usuario, en la ranura 33 se armó Delay + Delay copiando y pegando, se guardó y la relectura coincidió byte por byte. El pedal mostró los dos Delay encendidos y el usuario confirmó que suenan ambos. La app permite el mismo efecto en varias ranuras. La 33 se restauró a "Empty" (verificada).
+
+### P2: Sincronizar cambios por MIDI a través de la app
+- **Idea (usuario, 2026-11-22):** sincronizar cambios de efectos o patches por MIDI a través de la app con el pedal conectado.
+- **Por aclarar con el usuario antes de diseñar:** qué se sincroniza y con qué (otro dispositivo o software MIDI, otro pedal, la app en otra computadora), en qué dirección, y si los cambios deben guardarse o solo escucharse.
+- **Reglas que aplican:** cualquier envío al pedal pasa por `withApprovedWrites()`; solo Guardar deja un cambio permanente (CLAUDE.md, reglas 1 y 3).
