@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import cap from '../protocol/__fixtures__/ms60b-bank-2026-11-10-fw2.10.json'
 import { isAllowedReadMessage } from '../protocol/messages'
@@ -176,6 +176,61 @@ describe('rename on the pedal (simulated)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Guardar' }))
     await waitFor(() => expect(screen.queryByText('sin guardar')).not.toBeInTheDocument())
     expect(decodePatch60B(pedal.memory[active]).name).toBe('Mi Fuzz')
+  })
+})
+
+describe('bank backup and restore (simulated pedal)', () => {
+  const mockDownloads = () => {
+    const texts: string[] = []
+    const blobs = new Map<string, Blob>()
+    let n = 0
+    URL.createObjectURL = (b: Blob) => {
+      const u = `blob:${n++}`
+      blobs.set(u, b)
+      void b.text().then((t) => texts.push(t))
+      return u
+    }
+    URL.revokeObjectURL = () => {}
+    HTMLAnchorElement.prototype.click = function () {}
+    return texts
+  }
+
+  it('Respaldar banco re-reads the pedal and downloads a backup file of what it holds', async () => {
+    const texts = mockDownloads()
+    const { pedal } = await connected()
+    fireEvent.click(screen.getByRole('button', { name: 'Respaldar banco' }))
+    await waitFor(() => expect(texts).toHaveLength(1))
+    const { parseBackupJson } = await import('../protocol/backupFile')
+    expect(parseBackupJson(texts[0]).patches).toEqual(pedal.memory)
+    expect(writes(pedal.sent)).toEqual([])
+  })
+
+  it('Restaurar banco writes only the chosen slots that differ, verifies them and returns to the active patch', async () => {
+    mockDownloads()
+    const { pedal } = await connected()
+    const backup = { ...cap, patches: cap.patches.map((h, i) => (i === 32 ? cap.patches[6] : i === 10 ? cap.patches[7] : h)) }
+    const input = document.querySelector('input[type=file]') as HTMLInputElement
+    fireEvent.change(input, { target: { files: [new File([JSON.stringify(backup)], 'backup.json', { type: 'application/json' })] } })
+    const dialog = await screen.findByRole('dialog', { hidden: true })
+    expect(dialog.textContent).toMatch(/33.*Empty.*Octaver/)
+    expect(dialog.textContent).toMatch(/11.*Phase/)
+    // Keep slot 11 as it is: write only 33.
+    fireEvent.click(within(dialog).getAllByRole('checkbox', { hidden: true })[0]) // slot 11 is listed first
+    fireEvent.click(screen.getByRole('button', { name: /Escribir 1 ranura/, hidden: true }))
+    await waitFor(() => expect(screen.getByText(/1 de 1 ranuras restauradas y verificadas/)).toBeInTheDocument())
+    expect(pedal.memory[32]).toEqual(original[6])
+    expect(pedal.memory[10]).toEqual(original[10])
+    expect(writes(pedal.sent).filter((m) => m[4] === 0x32).map((m) => m[8])).toEqual([32])
+    expect(pedal.program).toBe(active)
+  })
+
+  it('refuses to back up or restore while there are unsaved changes', async () => {
+    mockDownloads()
+    const { pedal } = await connected({ live: false })
+    fireEvent.click(screen.getByRole('button', { name: /BassDrive activo/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Respaldar banco' }))
+    expect(await screen.findByText(/Guarda o revierte primero/)).toBeInTheDocument()
+    expect(writes(pedal.sent)).toEqual([])
   })
 })
 

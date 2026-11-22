@@ -16,7 +16,9 @@ import {
   toggleBlock,
   type Patch,
 } from '../model/patch'
+import { BackupFileError, parseBackupJson, restorePlan, toBackupJson, type BankBackup, type RestoreItem } from '../protocol/backupFile'
 import type { PedalSession } from '../protocol/pedalSession'
+import { BankRestoreDialog } from './BankRestoreDialog'
 import { ParamKnob } from './ParamKnob'
 import { usePedalSync } from './usePedalSync'
 import { TypePicker } from './TypePicker'
@@ -39,6 +41,44 @@ export function EditorPage({ initial, sourceLabel, pedal, liveDefault = true }: 
   const [live, setLive] = useState(!!pedal && liveDefault)
   const sync = usePedalSync(pedal, state, dispatch, live)
   const [picker, setPicker] = useState<Picker>(null)
+  const [restore, setRestore] = useState<{ fileName: string; backup: BankBackup; items: RestoreItem[] } | null>(null)
+  const [bankMsg, setBankMsg] = useState<string | null>(null)
+  const restoreInput = useRef<HTMLInputElement>(null)
+
+  const download = (name: string, text: string) => {
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }))
+    a.download = name
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }
+  const stamp = () => new Date().toISOString().replace(/[:.]/g, '-')
+
+  /** Re-reads the bank from the pedal and downloads it as a backup file. */
+  const backupNow = async () => {
+    setBankMsg(null)
+    try {
+      const cap = await sync.backupBank()
+      if (!cap) return
+      download(`ms60b-backup-${stamp()}.json`, toBackupJson(cap, 'MS-60B bank backup (MS-60B Edit).'))
+      setBankMsg('Respaldo descargado.')
+    } catch (e) {
+      setBankMsg((e as Error).message)
+    }
+  }
+
+  /** Reads the file, re-reads the pedal, and opens the restore dialog with the slots that differ. */
+  const openRestore = async (file: File) => {
+    setBankMsg(null)
+    try {
+      const backup = parseBackupJson(await file.text())
+      const cap = await sync.backupBank()
+      if (!cap) return
+      setRestore({ fileName: file.name, backup, items: restorePlan(cap.patches, backup.patches) })
+    } catch (e) {
+      setBankMsg(e instanceof BackupFileError ? `Archivo de respaldo: ${e.message}` : (e as Error).message)
+    }
+  }
   const dragFrom = useRef<number | null>(null)
   const [dropAt, setDropAt] = useState<number | null>(null)
 
@@ -117,6 +157,27 @@ export function EditorPage({ initial, sourceLabel, pedal, liveDefault = true }: 
           <span className={total > 1 ? 'bad' : ''}>{Math.round(total * 100)}%</span>
         </div>
         <div className="actions">
+          {pedal && (
+            <>
+              <button onClick={() => void backupNow()} disabled={!!sync.busy} title="Lee los 50 patches del pedal y los descarga como archivo">
+                Respaldar banco
+              </button>
+              <button onClick={() => restoreInput.current?.click()} disabled={!!sync.busy} title="Restaura patches desde un archivo de respaldo">
+                Restaurar banco…
+              </button>
+              <input
+                ref={restoreInput}
+                type="file"
+                accept=".json,application/json"
+                hidden
+                onChange={(e) => {
+                  const f = e.target.files?.[0]
+                  e.target.value = ''
+                  if (f) void openRestore(f)
+                }}
+              />
+            </>
+          )}
           <button
             onClick={() => void sync.revert()}
             disabled={(!dirty && !pedal) || !!sync.busy}
@@ -160,6 +221,11 @@ export function EditorPage({ initial, sourceLabel, pedal, liveDefault = true }: 
         <div className="banner hint">
           En vivo: lo que editas suena en el pedal. Si cambias de patch, revierte o desconectas sin guardar, la app restaura el original. Lo
           que muevas en el propio pedal cuenta como edición y también se revierte si no guardas.
+        </div>
+      )}
+      {bankMsg && (
+        <div className="banner" role="status">
+          {bankMsg} <button onClick={() => setBankMsg(null)}>OK</button>
         </div>
       )}
       {sync.error && (
@@ -303,6 +369,30 @@ export function EditorPage({ initial, sourceLabel, pedal, liveDefault = true }: 
             else edit((p) => changeType(p, picker.index, id), picker.index)
             setPicker(null)
           }}
+        />
+      )}
+
+      {restore && (
+        <BankRestoreDialog
+          fileName={restore.fileName}
+          items={restore.items}
+          warning={
+            restore.backup.identity && restore.backup.identity.version !== state.firmware.toFixed(2)
+              ? `El respaldo es de la versión de firmware ${restore.backup.identity.version}; el pedal tiene la ${state.firmware.toFixed(2)}.`
+              : undefined
+          }
+          blocked={dirtyCount > 0 ? 'Hay patches con cambios sin guardar: guárdalos o reviértelos antes de restaurar.' : undefined}
+          onRun={(slots, onProgress, cancelled) => sync.restoreBank(restore.backup.patches, slots, onProgress, cancelled)}
+          onDownloadCurrent={() =>
+            download(
+              `ms60b-backup-${stamp()}.json`,
+              toBackupJson(
+                { identity: { manufacturer: 0x52, deviceId: 0x5f, version: state.firmware.toFixed(2), firmware: state.firmware }, patches: state.slots.map((s) => s.raw ?? []) },
+                'MS-60B bank backup before a restore (MS-60B Edit).',
+              ),
+            )
+          }
+          onClose={() => setRestore(null)}
         />
       )}
 

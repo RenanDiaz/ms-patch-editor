@@ -18,7 +18,7 @@ Una interfaz de edición de patches para el MS-60B, inspirada en AX8-Edit:
 
 - Cadena de los 4 bloques visible de punta a punta.
 - Panel de parámetros del bloque seleccionado.
-- Lista de los 50 patches con arrastrar y soltar.
+- Lista de los 50 patches. (Arrastrar y soltar patches quedó fuera de v1.)
 - Indicador de DSP por bloque.
 - Edición en un buffer local, con guardado explícito al pedal mediante un botón.
 
@@ -37,10 +37,10 @@ Esto sigue a AX8-Edit y reemplaza el auto guardado de la utilidad de g200kg.
 - **Mecanismo de la escucha en vivo (probado, `docs/protocol.md` §9.3):** `0x28` y `0x31` cambian el buffer del patch activo, y el pedal lo guarda en la ranura al salir del patch, con AUTO SAVE ON u OFF. `0x31` funciona en los efectos 1-3, no en el 4.
   - Parámetros de los efectos 1-3: `0x31`. Efecto 4 y cambios de cadena: `0x28`.
   - Al salir sin guardar, la app envía el patch original por `0x28` antes del cambio de patch, y relee la ranura.
-  - Si el usuario cambia de patch en el pedal mientras edita en vivo, el pedal guarda la versión editada. La app lo detecta por el `C0` y restaura la ranura anterior.
+  - Si el usuario cambia de patch en el pedal mientras edita en vivo, la app lo detecta sondeando el patch activo (`0x33` cada 250 ms; el pedal no lo anuncia) y restaura la ranura anterior. Cambios que el pedal tampoco anuncia (por ejemplo encender el efecto 4) se detectan releyendo su buffer (`0x29`) cada segundo.
   - Si la app se cierra de golpe: el cambio solo queda si luego se cambia de patch en el pedal. La app guarda en el navegador la ranura y sus bytes originales antes del primer cambio, y al reconectar ofrece restaurarla.
 - **Advertencia al usuario:** lo que se mueve en el propio pedal con AUTO SAVE encendido lo guarda el pedal.
-- **Cambios hechos en el pedal:** con AUTO SAVE encendido los guarda el pedal por su cuenta. La app solo los detecta (el pedal emite `0x31` y `C0 pp`) y los muestra como conflicto, según la regla anterior.
+- **Cambios hechos en el pedal:** con AUTO SAVE encendido los guarda el pedal por su cuenta. La app los detecta (`0x31` que emite el pedal al girar perillas, sondeo de `0x33` y relectura del buffer) y, sin escucha en vivo, los muestra como conflicto.
 - **Otras herramientas:** la utilidad de g200kg envía `0x28` en cada clic, así que escribe en el pedal aunque su AutoSave esté apagado. Ningún mensaje conocido lee los ajustes globales del pedal; el único sin descifrar, `0x60`, está prohibido.
 
 ## 4. Alcance v1
@@ -51,7 +51,7 @@ Esto sigue a AX8-Edit y reemplaza el auto guardado de la utilidad de g200kg.
 - Editar valores con arrastre, teclado y rueda, con control fino.
 - Indicador de DSP por bloque. Si el patch excede la capacidad, Guardar se bloquea y explica por qué.
 - Modelo de guardado de la sección 3.
-- Respaldo y restauración del banco completo como archivo local.
+- Respaldo y restauración del banco completo como archivo local. El respaldo vuelve a leer los 50 patches; la restauración muestra las ranuras que difieren, escribe solo las elegidas y verifica cada una. Ambos se rechazan si hay cambios sin guardar.
 
 ## 5. No objetivos v1
 
@@ -118,7 +118,7 @@ Todos sin escrituras, salvo S3, que usa un patch de prueba respaldado antes.
 
 ## 11. Preguntas abiertas
 
-1. ¿Empaquetas con Electron desde el inicio, o empiezas en web y decides después de S2?
+1. ~~¿Empaquetas con Electron desde el inicio?~~ Respondida: web primero; Electron cuando v1 esté cerrada.
 2. ¿Qué patches de referencia debe replicar el prototipo primero?
 
 ## 12. Pendientes (ideas por implementar)

@@ -121,6 +121,11 @@
 .picker footer { font-size: 11px; }
 .confirm { width: min(440px, calc(100vw - 32px)); }
 .confirm h2 { margin: 0 0 8px; font-size: 16px; }
+.bank-dialog { width: min(560px, calc(100vw - 32px)); }
+.restore-list { list-style: none; padding: 0; margin: 8px 0; max-height: 40vh; overflow: auto; font-family: var(--mono); font-size: 13px; }
+.restore-list li { padding: 2px 0; }
+.restore-list .num { color: var(--e-muted); }
+.editor .linklike { background: none; border: 0; padding: 0; color: var(--e-accent); text-decoration: underline; cursor: pointer; }
 .confirm .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
 
 .connect-screen main { max-width: 560px; margin: 12vh auto 0; padding: 0 16px; }

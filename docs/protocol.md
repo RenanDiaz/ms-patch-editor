@@ -298,4 +298,4 @@ El usuario renombró el patch 33 en el propio pedal, en tres rondas, con todos l
 2. `-.;=@[]^_` y `` ` ``
 3. `{}~`
 
-Según el usuario, el editor del pedal empieza con el espacio, sigue con esos símbolos y termina con A-Z, a-z y 0-9. **No ofrece** `"` `*` `/` `:` `<` `>` `?` `\` `|`. La app solo acepta esos caracteres en los nombres (`isNameChar`, `src/model/patch.ts`).
+Según el usuario, el editor del pedal recorre los caracteres en este orden y luego vuelve a empezar: espacio, esos 23 símbolos, A-Z, a-z, 0-9. Las letras son solo las del alfabeto inglés (sin ñ ni acentos). **No ofrece** `"` `*` `/` `:` `<` `>` `?` `\` `|`. La app solo acepta esos caracteres en los nombres (`isNameChar`, `src/model/patch.ts`).

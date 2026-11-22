@@ -6,6 +6,7 @@ import { patchesEqual, type Patch } from '../model/patch'
 import { encodePatch60B } from '../protocol/patch60b'
 import { WrongPatchError, type PedalSession } from '../protocol/pedalSession'
 import { diffOffsets } from '../protocol/s3'
+import type { BankCapture } from '../protocol/scanBank'
 import { clearPending, readPending, writePending, type PendingRestore } from './pendingRestore'
 
 export interface Conflict {
@@ -324,6 +325,74 @@ export function usePedalSync(pedal: PedalSession | undefined, state: BankState, 
     return ok
   }
 
+  const dirtySlots = () => stateRef.current.slots.flatMap((s, i) => (isDirty(s) ? [i + 1] : []))
+
+  /**
+   * Reads the 50 patches again (read only) and refreshes the device copies.
+   * Refused while there are unsaved changes: in live mode they are in the
+   * pedal's buffer, and walking through the patches would keep them.
+   */
+  const backupBank = async (onProgress?: (slot: number) => void): Promise<BankCapture | null> => {
+    if (!pedal) return null
+    const dirty = dirtySlots()
+    if (dirty.length) throw new Error(`Guarda o revierte primero los patches con cambios: ${dirty.join(', ')}.`)
+    const out: { cap: BankCapture | null } = { cap: null }
+    await enqueue('Leyendo el banco…', async () => {
+      setError(null)
+      const cap = await pedal.scan(onProgress)
+      out.cap = cap
+      cap.patches.forEach((raw, index) => {
+        const old = stateRef.current.slots[index].raw
+        if (!old || diffOffsets(old, raw).length) dispatch({ type: 'loadSlot', index, patch: patchFromDevice(raw), raw, mode: 'replace' })
+      })
+      const a = pedal.activeProgram
+      if (a !== null) bufferRef.current = { slot: a, patch: patchFromDevice(cap.patches[a]) }
+      setPedalProgram(a)
+    })
+    if (!out.cap) throw new Error('No se pudo leer el banco.')
+    return out.cap
+  }
+
+  /**
+   * Writes the chosen slots from a backup (C0, 0x28, 0x32, ack, read back each)
+   * and returns to the patch the pedal was on. Stops between slots when
+   * `cancelled()` is true. Refused while there are unsaved changes.
+   */
+  const restoreBank = async (
+    backup: readonly number[][],
+    slots: readonly number[],
+    onProgress: (done: number, slot: number) => void,
+    cancelled: () => boolean,
+  ) => {
+    const results: { slot: number; ok: boolean; message?: string }[] = []
+    if (!pedal) return results
+    const dirty = dirtySlots()
+    if (dirty.length) throw new Error(`Guarda o revierte primero los patches con cambios: ${dirty.join(', ')}.`)
+    await enqueue('Restaurando el banco…', async () => {
+      setError(null)
+      const back = liveRef.current ? stateRef.current.current : pedal.activeProgram
+      try {
+        for (const [k, slot] of slots.entries()) {
+          if (cancelled()) break
+          onProgress(k, slot)
+          try {
+            const r = await pedal.save(slot, backup[slot])
+            dispatch({ type: 'loadSlot', index: slot, patch: patchFromDevice(r.readBack), raw: r.readBack, mode: 'replace' })
+            results.push(r.diff.length ? { slot, ok: false, message: `la relectura difiere en los bytes ${r.diff.join(', ')}` } : { slot, ok: true })
+          } catch (e) {
+            results.push({ slot, ok: false, message: (e as Error).message })
+          }
+        }
+      } finally {
+        if (back !== null) await pedal.select(back)
+        const a = pedal.activeProgram
+        if (a !== null) bufferRef.current = { slot: a, patch: stateRef.current.slots[a].device }
+        setPedalProgram(a)
+      }
+    })
+    return results
+  }
+
   const resolveConflict = (keep: 'pedal' | 'mine') => {
     if (!conflict) return
     dispatch({ type: 'loadSlot', index: conflict.index, patch: conflict.patch, raw: conflict.raw, mode: keep === 'pedal' ? 'replace' : 'deviceOnly' })
@@ -349,5 +418,5 @@ export function usePedalSync(pedal: PedalSession | undefined, state: BankState, 
     setPendingState(null)
   }
 
-  return { pedalProgram, conflict, resolveConflict, revert, save, busy, error, pending, restorePending, dismissPending }
+  return { pedalProgram, conflict, resolveConflict, revert, save, busy, error, pending, restorePending, dismissPending, backupBank, restoreBank }
 }
