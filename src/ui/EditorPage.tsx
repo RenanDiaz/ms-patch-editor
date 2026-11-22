@@ -23,6 +23,7 @@ import {
 } from '../model/patch'
 import { BackupFileError, parseBackupJson, restorePlan, toBackupJson, type BankBackup, type RestoreItem } from '../protocol/backupFile'
 import type { PedalSession } from '../protocol/pedalSession'
+import { paramInfo } from '../model/paramInfo'
 import { BankRestoreDialog } from './BankRestoreDialog'
 import { PatchTransferDialog } from './PatchTransferDialog'
 import { categoryVar } from './categoryColor'
@@ -661,6 +662,7 @@ export function EditorPage({ initial, pedal, liveDefault = true }: Props) {
                       def={p}
                       raw={block.params[j]}
                       device={devBlock?.params[j]}
+                      help={paramInfo(block.effectId, j)?.help}
                       firmware={state.firmware}
                       onChange={(v) => edit((pt) => setParam(pt, sel, j, v), undefined, `p${state.current}.${sel}.${j}`)}
                     />

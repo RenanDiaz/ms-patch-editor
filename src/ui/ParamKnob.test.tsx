@@ -68,3 +68,11 @@ describe('ParamKnob', () => {
     expect(onChange).toHaveBeenCalledWith(scale.toRaw(2))
   })
 })
+
+describe('parameter help', () => {
+  it('shows the help as a tooltip and reads it to screen readers', () => {
+    render(<ParamKnob def={param('D Comp', 'Level')} raw={100} firmware={FW} help="Output level of the effect." onChange={() => {}} />)
+    const name = screen.getByLabelText('Level. Output level of the effect.')
+    expect(name).toHaveAttribute('title', 'Level: Output level of the effect.')
+  })
+})

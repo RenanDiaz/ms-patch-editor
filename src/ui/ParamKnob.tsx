@@ -8,6 +8,8 @@ interface Props {
   firmware: number
   /** The pedal's value for this parameter; undefined when the block is new (no pedal value to compare). */
   device?: number
+  /** What the parameter does (`paramInfo()`, from Zoom's Ver.2 list); shown as a tooltip and read by screen readers. */
+  help?: string
   onChange: (raw: number) => void
 }
 
@@ -30,7 +32,7 @@ const angleOf = (frac: number) => -135 + 270 * frac
  * Changed = different from what the pedal has (`device`), shown as
  * "on pedal: X" and a tick on the arc.
  */
-export function ParamKnob({ def, raw, firmware, device, onChange }: Props) {
+export function ParamKnob({ def, raw, firmware, device, help, onChange }: Props) {
   const scale = paramScale(def, firmware)
   const pos = scale.toPos(raw)
   const last = scale.steps - 1
@@ -109,7 +111,7 @@ export function ParamKnob({ def, raw, firmware, device, onChange }: Props) {
     const on = pos === 1
     return (
       <div className={`param ${changed ? 'changed' : ''}`}>
-        <div className="param-name" title={def.name}>{def.name}</div>
+        <ParamName name={def.name} help={help} />
         <div className="param-control">
           <button
             className={`param-switch ${on ? 'on' : ''}`}
@@ -132,7 +134,7 @@ export function ParamKnob({ def, raw, firmware, device, onChange }: Props) {
   if (kind === 'list') {
     return (
       <div className={`param ${changed ? 'changed' : ''}`}>
-        <div className="param-name" title={def.name}>{def.name}</div>
+        <ParamName name={def.name} help={help} />
         <div className="param-control">
           <select className="param-select" aria-label={`${def.name} (list)`} value={pos} onChange={(e) => setPos(Number(e.target.value))}>
             {Array.from({ length: scale.steps }, (_, p) => (
@@ -154,7 +156,7 @@ export function ParamKnob({ def, raw, firmware, device, onChange }: Props) {
   const ghost = devFrac === null ? null : [pt(angleOf(devFrac), 34), pt(angleOf(devFrac), 48)]
   return (
     <div className={`param ${changed ? 'changed' : ''}`}>
-      <div className="param-name" title={def.name}>{def.name}</div>
+      <ParamName name={def.name} help={help} />
       <div
         ref={knobRef}
         className="knob param-control"
@@ -213,6 +215,16 @@ export function ParamKnob({ def, raw, firmware, device, onChange }: Props) {
       <div className="param-range">
         {scale.label(scale.toRaw(0))} – {scale.label(scale.toRaw(last))}
       </div>
+    </div>
+  )
+}
+
+/** Parameter name; with help text it gets a dotted underline and a tooltip (what it does, and its direction). */
+function ParamName({ name, help }: { name: string; help?: string }) {
+  if (!help) return <div className="param-name" title={name}>{name}</div>
+  return (
+    <div className="param-name has-help" title={`${name}: ${help}`} tabIndex={0} aria-label={`${name}. ${help}`}>
+      {name}
     </div>
   )
 }
