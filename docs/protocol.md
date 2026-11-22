@@ -325,3 +325,19 @@ Ningún paso marcó diferencias en la relectura, y la relectura periódica del b
 ### 9.9 Mismo efecto dos veces en un patch (2026-11-22)
 
 Prueba aprobada por el usuario en la ranura 33, con el editor y escucha en vivo: Delay en el bloque 1, copiado y pegado después (Delay · Delay). En vivo se enviaron dos `0x28`; Guardar (`0x28` + `0x32`) se verificó byte por byte, y la relectura del buffer no mostró cambios después. El pedal mostró los dos Delay encendidos y el usuario confirmó que suenan ambos. Conclusión: un patch puede tener el mismo efecto en más de una ranura. La 33 se restauró a "Empty" con "Restaurar banco" (verificada).
+
+### 9.10 Interfaz rediseñada con el pedal (2026-11-22)
+
+Prueba aprobada por el usuario en la ranura 33, ejecutada por Claude en su Chrome con la interfaz nueva (inglés, dirección A + ideas de B). Antes: respaldo completo (`.backups/antes-de-prueba-rediseno-2026-11-22.json`, sin escrituras).
+
+| Caso | Mensajes | Resultado |
+|---|---|---|
+| Abrir la 33 (Live) | `C0 20` | El pedal pasa a la 33 |
+| Buscar "ampeg" en el selector, Enter | un `0x28` | Encuentra SVT y Flip Top por su referencia; elige SVT; "Changes vs pedal: Chain THRU → SVT" |
+| Gain 40 → 43 con el teclado | `0x31 00 06 2B` | En vivo |
+| Cmd+Z / Cmd+Shift+Z | `0x31 …28` / `0x31 …2B` | Deshace y rehace (las pulsaciones rápidas cuentan como un paso) |
+| Cmd+S | `0x28` + `0x32` | Guardado y verificado. El aviso "Saved to 33 ✓" no se vio porque lo tapaba el mensaje anterior del respaldo; corregido (el mensaje más nuevo gana), con test |
+| Revert con 2 cambios | confirmación; un `0x28` | "Reverted 33 to the pedal's version. ⌘Z brings your changes back." |
+| Cambiar a la 34 con un cambio, "Revert and open 34" | `0x28` original, `C0 21`, relectura de la 33 | Correcto |
+| Bank → Restore 33 desde el respaldo | `C0`, `0x28`, `0x32`, relectura | "1 of 1 patches restored and checked." |
+| Respaldo final | sin escrituras | Idéntico al respaldo previo en las 50 ranuras |

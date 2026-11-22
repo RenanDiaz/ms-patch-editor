@@ -209,6 +209,18 @@ describe('bank backup and restore (simulated pedal)', () => {
     expect(writes(pedal.sent)).toEqual([])
   })
 
+  it('after a backup message, saving still shows "Saved to NN ✓" (found on the pedal)', async () => {
+    const texts = mockDownloads()
+    await connected()
+    openBankMenu()
+    fireEvent.click(screen.getByRole('menuitem', { name: /Back up bank/ }))
+    await waitFor(() => expect(texts).toHaveLength(1))
+    fireEvent.keyDown(firstKnob(), { key: 'ArrowUp' })
+    await settle()
+    fireEvent.keyDown(window, { key: 's', metaKey: true })
+    expect(await screen.findByText(`Saved to ${String(active + 1).padStart(2, '0')} ✓`)).toBeInTheDocument()
+  })
+
   it('Restore bank writes only the chosen slots that differ, verifies them and returns to the active patch', async () => {
     mockDownloads()
     const { pedal } = await connected()

@@ -101,6 +101,7 @@ export function EditorPage({ initial, pedal, liveDefault = true }: Props) {
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const flash = (text: string) => {
     clearTimeout(noticeTimer.current)
+    setBankMsg(null) // the newest message wins: an older bank message must not hide "Saved to NN ✓"
     setNotice(text)
     noticeTimer.current = setTimeout(() => setNotice(null), NOTICE_MS)
   }
