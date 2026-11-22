@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dirección C · Cadena al frente</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&family=Azeret+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --base: #13282b; --panel: #1b3539; --raised: #244449; --line: #4d7a77; --cable: #6f9b97;
+  --text: #eaf4f2; --muted: #a5c0bc;
+  --live: #ff6b5b; --dirty: #f4c152; --select: #ffffff;
+  --c-dyn: #7ad9a6; --c-drive: #ff9a5c; --c-mod: #c3a6ff; --c-delay: #6fd0f0;
+  --ui: "Onest", system-ui, sans-serif;
+  --num: "Azeret Mono", ui-monospace, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--base); color: var(--text); font: 15px/1.4 var(--ui); }
+button { font: inherit; color: inherit; cursor: pointer; }
+:focus-visible { outline: 3px solid var(--select); outline-offset: 2px; }
+
+.app { display: grid; grid-template-rows: 96px 1fr 36px; height: 100vh; min-height: 640px; }
+
+/* Navegación tipo pedal: ±1 patch */
+.top { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 24px; padding: 0 24px; border-bottom: 1px solid var(--line); }
+.nav { display: flex; align-items: center; gap: 8px; }
+.step { width: 52px; height: 52px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); font-size: 20px; }
+.peek { font: 500 13px var(--num); color: var(--muted); white-space: pre; }
+.peek.r { text-align: right; }
+.cur { display: flex; align-items: baseline; gap: 14px; padding: 0 10px; }
+.cur .n { font: 700 54px/1 var(--num); }
+.cur .nm { font: 700 38px/1 var(--num); letter-spacing: .02em; white-space: pre; }
+.all { border: 1px solid var(--line); background: transparent; border-radius: 8px; padding: 8px 12px; color: var(--muted); }
+.all kbd, .foot kbd { font: 600 12px var(--num); color: var(--text); background: var(--raised); border-radius: 4px; padding: 1px 5px; }
+.state { white-space: nowrap; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.state .row { display: flex; align-items: center; gap: 8px; }
+.state .live { display: inline-flex; align-items: center; gap: 8px; color: var(--live); font-weight: 700; }
+.state .live i { width: 10px; height: 10px; border-radius: 50%; background: var(--live); }
+.state .sync { color: var(--muted); }
+.state .sync b { color: var(--text); font-family: var(--num); }
+.actions { white-space: nowrap; display: flex; gap: 10px; align-items: center; }
+.dirty { color: var(--dirty); font-weight: 700; border-bottom: 2px dotted var(--dirty); background: none; border-top: 0; border-left: 0; border-right: 0; padding: 0; }
+.btn { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 16px; font-weight: 600; }
+.btn.primary { background: var(--dirty); border-color: var(--dirty); color: #2a1e00; }
+.btn.quiet { background: transparent; border-color: transparent; color: var(--muted); font-weight: 500; }
+
+.mid { display: grid; grid-template-columns: 214px 1fr; min-height: 0; }
+.content { display: flex; flex-direction: column; min-width: 0; }
+.rail { border-right: 1px solid var(--line); padding: 16px 14px; overflow: auto; }
+.rail h2 { margin: 0 0 4px; font-size: 14px; font-weight: 600; }
+.rail p { margin: 0 0 10px; font-size: 12px; color: var(--muted); }
+.grid50 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
+.grid50 button { display: grid; place-items: center; height: 32px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); font: 600 13px var(--num); position: relative; padding: 0; }
+.grid50 button.e { background: transparent; color: var(--muted); border-style: dashed; }
+.grid50 button.cur { background: var(--text); color: var(--base); border-color: var(--text); }
+.grid50 button.d::after { content: ""; position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--dirty); }
+.grid50 button.cur.d::after { background: #b37f00; }
+.legend { margin-top: 12px; font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+.hover { margin-top: 14px; padding: 10px; border-radius: 8px; background: var(--panel); font-size: 13px; }
+.hover b { font-family: var(--num); }
+/* Cadena con todos los valores */
+.chainwrap { padding: 22px 24px 0; }
+.chain { display: grid; grid-template-columns: 36px repeat(4, minmax(0, 1fr)) 44px; align-items: start; position: relative; }
+.cable { position: absolute; left: 34px; right: 40px; top: 34px; height: 3px; background: var(--cable); }
+.io { font: 600 12px var(--num); color: var(--muted); margin-top: 26px; text-align: center; }
+.blk { position: relative; margin: 0 9px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px 12px 12px 12px;
+  padding: 0; text-align: left; display: flex; flex-direction: column; }
+.blk header { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.blk .led { width: 18px; height: 18px; border-radius: 50%; background: var(--c); box-shadow: 0 0 10px var(--c); flex: none; }
+.blk .nm { font: 700 20px var(--num); flex: 1; }
+.blk .pos { font: 600 13px var(--num); color: var(--muted); }
+.blk dl { margin: 0; padding: 8px 14px 12px; display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; font-size: 14px; }
+.blk dt { color: var(--muted); }
+.blk dd { margin: 0; font: 600 14px var(--num); text-align: right; font-variant-numeric: tabular-nums; }
+.blk dd.chg { color: var(--dirty); }
+.blk dd.chg::before { content: "● "; font-size: 9px; vertical-align: 2px; }
+.blk.off { background: transparent; border-style: dashed; }
+.blk.off .led { background: transparent; border: 2px solid var(--c); box-shadow: none; }
+.blk.off .nm::after { content: "bypass"; display: inline-block; margin-left: 10px; font: 500 13px var(--ui); color: var(--muted); }
+.blk.off dd, .blk.off .nm { color: var(--muted); }
+.blk.sel { border: 2px solid var(--select); border-bottom-left-radius: 0; border-bottom-right-radius: 0; background: var(--raised); border-bottom-color: var(--raised); z-index: 2; margin-bottom: -2px; }
+.blk.sel::after { content: ""; position: absolute; left: -2px; right: -2px; bottom: -14px; height: 14px; background: var(--raised); border-left: 2px solid var(--select); border-right: 2px solid var(--select); }
+
+/* Cajón del bloque seleccionado */
+.drawer { margin: 12px 24px 18px; background: var(--raised); border: 2px solid var(--select); border-radius: 14px; padding: 18px 22px; display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+.dhead { display: flex; align-items: center; gap: 14px; }
+.dhead h1 { margin: 0; font: 700 26px var(--num); }
+.dhead .meta { color: var(--muted); font-size: 14px; }
+.dhead .sp { flex: 1; }
+.knobs { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.k { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.k .pn { font-size: 15px; font-weight: 600; }
+.k svg { width: 96px; height: 96px; }
+.k .v { font: 700 30px var(--num); font-variant-numeric: tabular-nums; }
+.k .was { font-size: 13px; color: var(--muted); min-height: 18px; }
+.k.chg .v { color: var(--dirty); }
+
+.foot { display: flex; align-items: center; gap: 20px; padding: 0 24px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+.foot .sp { flex: 1; }
+
+@media (max-width: 760px) {
+  .app { grid-template-rows: auto auto auto auto; height: auto; }
+  .top { grid-template-columns: 1fr; gap: 12px; padding: 12px 16px; }
+  .peek { display: none; } .cur .n { font-size: 36px; } .cur .nm { font-size: 26px; }
+  .chainwrap { padding: 16px; } .chain { grid-template-columns: 1fr 1fr; gap: 10px; } .io, .cable { display: none; }
+  .blk { margin: 0; } .blk.sel::after { display: none; } .blk.sel { border-bottom: 2px solid var(--select); border-radius: 12px; margin: 0; }
+  .drawer { margin: 0 16px 16px; } .knobs { grid-template-columns: repeat(3, 1fr); } .k svg { width: 76px; height: 76px; }
+  .foot { flex-wrap: wrap; padding: 10px 16px; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="nav">
+      <button class="step" aria-label="Patch anterior (06 FRETLESS)">◀</button>
+      <span class="peek r">06 FRETLESS</span>
+      <div class="cur"><span class="n">07</span><span class="nm">DUB DRIVE</span></div>
+      <span class="peek">08 FUZZ LEAD</span>
+      <button class="step" aria-label="Patch siguiente (08 FUZZ LEAD)">▶</button>
+    </div>
+    <div class="state">
+      <div class="row"><span class="live"><i></i>En vivo</span><span class="sync">pedal en <b>07</b> = el que editas</span></div>
+      <div class="row sync">MS-60B · firmware 2.10 · USB</div>
+    </div>
+    <div class="actions">
+      <button class="dirty" title="Ver la lista de cambios">3 cambios</button>
+      <button class="btn">Revertir</button>
+      <button class="btn primary">Guardar</button>
+      <button class="btn quiet" aria-haspopup="menu">Banco ▾</button>
+    </div>
+  </header>
+
+  <div class="mid">
+  <nav class="rail" aria-label="Patches">
+    <h2>Banco</h2><p>50 patches, como en el pedal</p>
+    <div class="grid50" id="g50"></div>
+    <div class="legend"><span>● amarillo: cambios sin guardar</span><span>borde punteado: Empty</span></div>
+    <div class="hover"><b>12 FILTER FNK</b><br>M Comp → BaAutoWah<br><span style="color:var(--dirty)">2 cambios sin guardar</span></div>
+  </nav>
+  <div class="content">
+  <div class="chainwrap">
+    <section class="chain" aria-label="Cadena de efectos">
+      <div class="cable"></div>
+      <div class="io">IN</div>
+      <button class="blk" style="--c:var(--c-dyn)">
+        <header><span class="led"></span><span class="nm">OptComp</span><span class="pos">1</span></header>
+        <dl><dt>Drive</dt><dd>7</dd><dt>Tone</dt><dd>54</dd><dt>Level</dt><dd>50</dd></dl>
+      </button>
+      <button class="blk sel" style="--c:var(--c-drive)" aria-current="true">
+        <header><span class="led"></span><span class="nm">BassDrive</span><span class="pos">2</span></header>
+        <dl><dt>Bass</dt><dd>+1</dd><dt>Trebl</dt><dd>+1</dd><dt>Prese</dt><dd>+3</dd><dt>Gain</dt><dd class="chg">72</dd>
+          <dt>Blend</dt><dd class="chg">85</dd><dt>Level</dt><dd>40</dd><dt>Mid</dt><dd class="chg">+7</dd></dl>
+      </button>
+      <button class="blk off" style="--c:var(--c-mod)">
+        <header><span class="led"></span><span class="nm">Ba Chorus</span><span class="pos">3</span></header>
+        <dl><dt>Depth</dt><dd>42</dd><dt>Rate</dt><dd>23</dd><dt>Mix</dt><dd>57</dd><dt>LoCut</dt><dd>120Hz</dd><dt>Level</dt><dd>100</dd><dt>PreD</dt><dd>OFF</dd></dl>
+      </button>
+      <button class="blk" style="--c:var(--c-delay)">
+        <header><span class="led"></span><span class="nm">Delay</span><span class="pos">4</span></header>
+        <dl><dt>F.B</dt><dd>30</dd><dt>Mix</dt><dd>70</dd><dt>HiDMP</dt><dd>10</dd><dt>P-P</dt><dd>MONO</dd><dt>Level</dt><dd>100</dd><dt>Tail</dt><dd>OFF</dd></dl>
+      </button>
+      <div class="io">OUT</div>
+    </section>
+  </div>
+
+  <section class="drawer" aria-label="Parámetros de BassDrive">
+    <div class="dhead">
+      <h1>BassDrive</h1><span class="meta">bloque 2 · DSP 21 % de 50 % usado</span><span class="sp"></span>
+      <button class="btn">Bypass <kbd style="font:600 12px var(--num)">B</kbd></button>
+      <button class="btn">Cambiar efecto…</button><button class="btn quiet">Copiar</button><button class="btn quiet">Quitar</button>
+    </div>
+    <div class="knobs" id="knobs"></div>
+  </section>
+  </div></div>
+
+  <footer class="foot">
+    <span><kbd>←</kbd> <kbd>→</kbd> patch</span><span><kbd>1</kbd>–<kbd>4</kbd> bloque</span><span><kbd>B</kbd> bypass</span>
+    <span><kbd>⌘S</kbd> guardar</span><span><kbd>⌘Z</kbd> deshacer</span><span class="sp"></span><span>DSP 50 %</span>
+  </footer>
+</div>
+<script>
+document.getElementById('g50').innerHTML = Array.from({length: 50}, (_, i) => { const k = i + 1;
+  const c = [k === 7 ? 'cur' : '', k === 7 || k === 12 ? 'd' : '', k > 32 ? 'e' : ''].join(' ');
+  return `<button class="${c}">${String(k).padStart(2, '0')}</button>`; }).join('');
+const P = [
+  { n: 'Bass', v: '+1', p: .55 }, { n: 'Trebl', v: '+1', p: .55 }, { n: 'Prese', v: '+3', p: .65 },
+  { n: 'Gain', v: '72', p: .72, was: '60', wp: .60 }, { n: 'Blend', v: '85', p: .85, was: '100', wp: 1 },
+  { n: 'Level', v: '40', p: .267 }, { n: 'Mid', v: '+7', p: .85, was: '+4', wp: .70 },
+];
+const pt = (a, r) => [50 + r * Math.sin(a * Math.PI / 180), 50 - r * Math.cos(a * Math.PI / 180)];
+const arc = (a0, a1, r) => { const [x0, y0] = pt(a0, r), [x1, y1] = pt(a1, r); return `M${x0} ${y0} A${r} ${r} 0 ${a1 - a0 > 180 ? 1 : 0} 1 ${x1} ${y1}`; };
+const knob = (p, wp, chg) => {
+  const a = -135 + 270 * p, [px, py] = pt(a, 25), col = chg ? 'var(--dirty)' : 'var(--c-drive)';
+  let g = '';
+  if (wp !== undefined) { const [x0, y0] = pt(-135 + 270 * wp, 33), [x1, y1] = pt(-135 + 270 * wp, 48); g = `<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y1}" stroke="#eaf4f2" stroke-opacity=".75" stroke-width="3" stroke-linecap="round"/>`; }
+  return `<svg viewBox="0 0 100 100" aria-hidden="true"><path d="${arc(-135, 135, 41)}" fill="none" stroke="#4d7a77" stroke-width="7" stroke-linecap="round"/>
+  <path d="${arc(-135, a, 41)}" fill="none" stroke="${col}" stroke-width="7" stroke-linecap="round"/>${g}
+  <circle cx="50" cy="50" r="30" fill="#1b3539" stroke="#6f9b97"/><line x1="50" y1="50" x2="${px}" y2="${py}" stroke="#eaf4f2" stroke-width="5" stroke-linecap="round"/></svg>`;
+};
+document.getElementById('knobs').innerHTML = P.map(q => `<div class="k ${q.was ? 'chg' : ''}" role="slider" tabindex="0" aria-label="${q.n}" aria-valuetext="${q.v}">
+  <div class="pn">${q.n}</div>${knob(q.p, q.wp, !!q.was)}<div class="v">${q.v}</div><div class="was">${q.was ? 'pedal: ' + q.was : ''}</div></div>`).join('');
+</script>
+</body>
+</html>

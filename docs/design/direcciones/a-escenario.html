@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dirección A · Escenario</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Big+Shoulders+Display:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --base: #18202a; --panel: #212b37; --raised: #2b3746; --line: #4a5a6c;
+  --text: #eef3f7; --muted: #a3b1bf;
+  --live: #ff5a4e; --dirty: #ffc94a; --select: #8fd0ff;
+  --c-dyn: #6fd3a8; --c-drive: #ff8a4c; --c-mod: #b99cff; --c-delay: #5cc9ea;
+  --big: "Big Shoulders Display", "Arial Narrow", sans-serif;
+  --ui: "Atkinson Hyperlegible", system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--base); color: var(--text); font: 15px/1.35 var(--ui); }
+button { font: inherit; color: inherit; cursor: pointer; }
+:focus-visible { outline: 3px solid var(--select); outline-offset: 2px; }
+
+.app { display: grid; grid-template-rows: 118px 1fr 34px; height: 100vh; min-height: 640px; }
+
+/* ---- Estado: lo primero que se ve ---- */
+.status { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 28px;
+  padding: 0 28px; background: var(--panel); border-bottom: 2px solid var(--line); }
+.now { display: flex; align-items: center; gap: 18px; }
+.now .num { font: 800 84px/1 var(--big); letter-spacing: -.01em; }
+.now .name { font: 700 46px/1 var(--big); letter-spacing: .04em; white-space: pre; }
+.now .sub { font-size: 14px; color: var(--muted); margin-top: 6px; }
+.now .sub b { color: var(--text); font-weight: 700; }
+.pills { display: flex; gap: 10px; align-items: center; white-space: nowrap; }
+.save { white-space: nowrap; }
+.live { display: inline-flex; align-items: center; gap: 10px; padding: 10px 16px; border-radius: 999px;
+  background: color-mix(in srgb, var(--live) 18%, var(--panel)); border: 2px solid var(--live); font-weight: 700; }
+.live .dot { width: 14px; height: 14px; border-radius: 50%; background: var(--live); box-shadow: 0 0 0 4px color-mix(in srgb, var(--live) 30%, transparent); }
+.dirty { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 999px;
+  background: var(--dirty); color: #2a1d00; font-weight: 700; border: 0; }
+.dsp { width: 230px; }
+.dsp .lbl { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+.dsp .lbl b { color: var(--text); }
+.dsp .bar { display: flex; height: 12px; border-radius: 3px; background: var(--base); outline: 1px solid var(--line); overflow: hidden; gap: 2px; }
+.dsp .bar span { display: block; height: 100%; }
+.save { display: flex; gap: 10px; align-items: center; }
+.btn { background: var(--raised); border: 1px solid var(--line); border-radius: 8px; padding: 11px 18px; font-weight: 700; }
+.btn.primary { background: var(--text); color: var(--base); border-color: var(--text); padding: 11px 24px; }
+.btn.quiet { background: transparent; border-color: transparent; color: var(--muted); font-weight: 400; }
+kbd { font: 12px var(--ui); color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; margin-left: 6px; }
+.btn.primary kbd { color: #5a6876; border-color: #b8c3ce; }
+
+/* ---- Cuerpo ---- */
+.body { display: grid; grid-template-columns: 250px 1fr; min-height: 0; }
+.patches { border-right: 1px solid var(--line); overflow: auto; padding: 10px 0; }
+.patches h2 { font: 700 13px var(--ui); color: var(--muted); margin: 4px 18px 8px; }
+.patches ol { list-style: none; margin: 0; padding: 0; }
+.patches li { display: grid; grid-template-columns: 34px 1fr 18px; align-items: center; padding: 6px 18px;
+  font: 600 21px/1.1 var(--big); letter-spacing: .04em; }
+.patches li .n { color: var(--muted); font-weight: 600; }
+.patches li.cur { background: var(--raised); box-shadow: inset 4px 0 0 var(--text); }
+.patches li .d { width: 10px; height: 10px; border-radius: 50%; background: var(--dirty); }
+.patches li .p { width: 12px; height: 12px; border-radius: 50%; background: var(--live); }
+.patches li.empty { color: #6f7f90; }
+
+.main { padding: 22px 28px; display: flex; flex-direction: column; gap: 22px; min-width: 0; overflow: auto; }
+
+.chain { display: grid; grid-template-columns: 32px repeat(4, 1fr) 40px; align-items: center; position: relative; gap: 0; }
+.io { font: 700 13px var(--ui); color: var(--muted); text-align: center; }
+.cable { position: absolute; left: 30px; right: 36px; top: 50%; height: 4px; background: var(--line); z-index: 0; }
+.blk { position: relative; z-index: 1; margin: 0 10px; background: var(--panel); border: 2px solid var(--line); border-radius: 10px;
+  overflow: hidden; min-height: 168px; display: flex; flex-direction: column; text-align: left; padding: 0; }
+.blk .band { height: 10px; background: var(--c); }
+.blk .in { padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.blk .top { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: var(--muted); }
+.blk .nm { font: 700 34px/1 var(--big); letter-spacing: .02em; }
+.blk .kv { display: flex; gap: 14px; font-size: 14px; color: var(--muted); margin-top: auto; }
+.blk .kv b { color: var(--text); font: 700 20px var(--big); margin-left: 3px; }
+.sw { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--text); border: 1px solid var(--line);
+  border-radius: 999px; padding: 3px 10px 3px 6px; background: var(--raised); }
+.sw i { width: 14px; height: 14px; border-radius: 50%; background: var(--c); }
+.blk.sel { border-color: var(--select); box-shadow: 0 0 0 3px color-mix(in srgb, var(--select) 35%, transparent); }
+.blk.off { background: repeating-linear-gradient(135deg, var(--panel) 0 10px, #1d2631 10px 20px); }
+.blk.off .band { background: transparent; border-bottom: 2px dashed var(--c); }
+.blk.off .nm, .blk.off .kv b { color: #8a98a7; }
+.blk.off .sw { background: transparent; color: var(--muted); }
+.blk.off .sw i { background: transparent; border: 2px solid var(--muted); }
+.blk .dm { position: absolute; top: 18px; right: 12px; }
+
+.editor { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px 24px; }
+.ehead { display: flex; align-items: center; gap: 18px; margin-bottom: 18px; }
+.ehead .slot { width: 44px; height: 44px; border-radius: 8px; background: var(--c-drive); color: #2a1300;
+  font: 800 30px/44px var(--big); text-align: center; }
+.ehead h1 { margin: 0; font: 700 40px/1 var(--big); letter-spacing: .03em; }
+.ehead .meta { color: var(--muted); font-size: 14px; }
+.ehead .sp { flex: 1; }
+.changes { font-size: 14px; color: var(--muted); }
+.changes b { color: var(--dirty); }
+.knobs { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
+.k { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 4px 12px; border-radius: 10px; }
+.k .pn { font-size: 16px; font-weight: 700; }
+.k svg { width: 104px; height: 104px; }
+.k .v { font: 700 40px/1 var(--big); font-variant-numeric: tabular-nums; }
+.k .was { font-size: 13px; color: var(--muted); min-height: 18px; }
+.k.chg { background: color-mix(in srgb, var(--dirty) 9%, transparent); }
+.k.chg .v { color: var(--dirty); }
+.k.chg .was b { color: var(--text); }
+.k.focus { outline: 3px solid var(--select); outline-offset: -3px; }
+
+.foot { display: flex; align-items: center; gap: 22px; padding: 0 28px; background: var(--panel); border-top: 1px solid var(--line);
+  font-size: 13px; color: var(--muted); }
+.foot .sp { flex: 1; }
+
+@media (max-width: 760px) {
+  .app { grid-template-rows: auto 1fr auto; height: auto; }
+  .status { grid-template-columns: 1fr; gap: 12px; padding: 14px 16px; }
+  .now .num { font-size: 56px; } .now .name { font-size: 32px; }
+  .body { grid-template-columns: 1fr; } .patches { max-height: 160px; border-right: 0; border-bottom: 1px solid var(--line); }
+  .main { padding: 16px; } .chain { grid-template-columns: 1fr 1fr; gap: 10px; } .io, .cable { display: none; }
+  .blk { margin: 0; } .knobs { grid-template-columns: repeat(3, 1fr); } .k svg { width: 80px; height: 80px; }
+  .foot { flex-wrap: wrap; padding: 10px 16px; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="status">
+    <div class="now">
+      <div class="num">07</div>
+      <div>
+        <div class="name">DUB DRIVE</div>
+        <div class="sub">El pedal está en <b>07</b>: lo que oyes es este patch</div>
+      </div>
+    </div>
+    <div class="pills">
+      <button class="live" aria-pressed="true" title="Lo que editas suena en el pedal. Si sales sin guardar, se restaura el original."><span class="dot"></span>En vivo</button>
+      <button class="dirty" title="Ver qué cambió">3 cambios sin guardar</button>
+    </div>
+    <div class="dsp" role="meter" aria-label="DSP estimado" aria-valuenow="50" aria-valuemin="0" aria-valuemax="100">
+      <div class="lbl"><span>DSP</span><b>50 %</b></div>
+      <div class="bar">
+        <span style="width:13%;background:var(--c-dyn)"></span><span style="width:21%;background:var(--c-drive)"></span>
+        <span style="width:9%;background:var(--c-mod);opacity:.55"></span><span style="width:7%;background:var(--c-delay)"></span>
+      </div>
+    </div>
+    <div class="save">
+      <button class="btn">Revertir</button>
+      <button class="btn primary">Guardar en 07<kbd>⌘S</kbd></button>
+      <button class="btn quiet" aria-haspopup="menu">Banco ▾</button>
+    </div>
+  </header>
+
+  <div class="body">
+    <nav class="patches" aria-label="Patches">
+      <h2>Patches · 2 con cambios</h2>
+      <ol id="list"></ol>
+    </nav>
+
+    <main class="main">
+      <section class="chain" aria-label="Cadena de efectos">
+        <div class="cable"></div>
+        <div class="io">IN</div>
+        <button class="blk" style="--c:var(--c-dyn)"><div class="band"></div><div class="in">
+          <div class="top"><span>Dinámica</span><span class="sw"><i></i>On</span></div>
+          <div class="nm">OptComp</div>
+          <div class="kv"><span>Drive<b>7</b></span><span>Tone<b>54</b></span><span>Level<b>50</b></span></div></div></button>
+        <button class="blk sel" style="--c:var(--c-drive)" aria-current="true"><div class="band"></div><div class="in">
+          <div class="top"><span>Saturación</span><span class="sw"><i></i>On</span></div>
+          <div class="nm">BassDrive</div>
+          <div class="kv"><span>Gain<b>72</b></span><span>Blend<b>85</b></span><span>Mid<b>+7</b></span></div></div></button>
+        <button class="blk off" style="--c:var(--c-mod)"><div class="band"></div><div class="in">
+          <div class="top"><span>Modulación</span><span class="sw"><i></i>Bypass</span></div>
+          <div class="nm">Ba Chorus</div>
+          <div class="kv"><span>Depth<b>42</b></span><span>Rate<b>23</b></span><span>Mix<b>57</b></span></div></div></button>
+        <button class="blk" style="--c:var(--c-delay)"><div class="band"></div><div class="in">
+          <div class="top"><span>Delay</span><span class="sw"><i></i>On</span></div>
+          <div class="nm">Delay</div>
+          <div class="kv"><span>F.B<b>30</b></span><span>Mix<b>70</b></span><span>Level<b>100</b></span></div></div></button>
+        <div class="io">OUT</div>
+      </section>
+
+      <section class="editor" aria-label="Parámetros de BassDrive">
+        <div class="ehead">
+          <div class="slot">2</div>
+          <div>
+            <h1>BassDrive</h1>
+            <div class="meta">Saturación · DSP 21 % · On</div>
+          </div>
+          <div class="sp"></div>
+          <div class="changes"><b>3 cambios</b> en este efecto frente al pedal</div>
+          <button class="btn">Cambiar efecto…</button>
+          <button class="btn quiet">Copiar</button>
+        </div>
+        <div class="knobs" id="knobs"></div>
+      </section>
+    </main>
+  </div>
+
+  <footer class="foot">
+    <span>↑ ↓ patch</span><span>1–4 efecto</span><span>B bypass</span><span>Arrastra o usa la rueda; Shift = fino</span>
+    <span class="sp"></span><span>MS-60B · firmware 2.10 · USB</span>
+  </footer>
+</div>
+
+<script>
+const names = ["CLEAN DI","SVT GROWL","SLAP COMP","OCTAVE UP","SYNTH WAH","FRETLESS","DUB DRIVE","FUZZ LEAD","CHORUS 80S","B15 WARM",
+ "PICK ROCK","FILTER FNK","REGGAE","MOTOWN","DOOM FUZZ","AMBIENT","TAPPING","SUB OCT","ACOUSTIC","JAZZ NECK",
+ "TALKBOX","RING MOD","WAH AUTO","STADIUM","FLANGE","DRY DI","GROWL 2","OCT FUZZ","SLAP 2","PHASER",
+ "LONG VERB","TREMOLO","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty",
+ "Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty"];
+const dirty = new Set([7, 12]);
+document.getElementById('list').innerHTML = names.map((n, i) => {
+  const k = i + 1, cls = [k === 7 ? 'cur' : '', n === 'Empty' ? 'empty' : ''].join(' ');
+  const mark = k === 7 ? '<span class="p" title="El pedal está aquí"></span>' : dirty.has(k) ? '<span class="d" title="Cambios sin guardar"></span>' : '<span></span>';
+  return `<li class="${cls}"><span class="n">${String(k).padStart(2,'0')}</span><span>${n}</span>${mark}</li>`;
+}).join('');
+
+// Parámetros de BassDrive (nombres y rangos de la tabla verificada; valores de ejemplo).
+const P = [
+  { n: 'Bass', v: '+1', p: .55 }, { n: 'Trebl', v: '+1', p: .55 }, { n: 'Prese', v: '+3', p: .65 },
+  { n: 'Gain', v: '72', p: .72, was: '60', wp: .60, focus: true }, { n: 'Blend', v: '85', p: .85, was: '100', wp: 1 },
+  { n: 'Level', v: '40', p: .267 }, { n: 'Mid', v: '+7', p: .85, was: '+4', wp: .70 },
+];
+const pt = (a, r) => [50 + r * Math.sin(a * Math.PI / 180), 50 - r * Math.cos(a * Math.PI / 180)];
+const arc = (a0, a1, r) => { const [x0, y0] = pt(a0, r), [x1, y1] = pt(a1, r); return `M${x0} ${y0} A${r} ${r} 0 ${a1 - a0 > 180 ? 1 : 0} 1 ${x1} ${y1}`; };
+const knob = (p, wp, chg) => {
+  const a = -135 + 270 * p, [px, py] = pt(a, 26), col = chg ? 'var(--dirty)' : 'var(--text)';
+  let ghost = '';
+  if (wp !== undefined) { const [gx0, gy0] = pt(-135 + 270 * wp, 34), [gx1, gy1] = pt(-135 + 270 * wp, 48); ghost = `<line x1="${gx0}" y1="${gy0}" x2="${gx1}" y2="${gy1}" stroke="var(--muted)" stroke-width="3" stroke-linecap="round"/>`; }
+  return `<svg viewBox="0 0 100 100" aria-hidden="true">
+    <path d="${arc(-135, 135, 41)}" fill="none" stroke="#4a5a6c" stroke-width="7" stroke-linecap="round"/>
+    <path d="${arc(-135, a, 41)}" fill="none" stroke="${col}" stroke-width="7" stroke-linecap="round"/>
+    ${ghost}
+    <circle cx="50" cy="50" r="30" fill="#2b3746" stroke="#5b6c80"/>
+    <line x1="50" y1="50" x2="${px}" y2="${py}" stroke="${col}" stroke-width="5" stroke-linecap="round"/></svg>`;
+};
+document.getElementById('knobs').innerHTML = P.map(q => `
+  <div class="k ${q.was ? 'chg' : ''} ${q.focus ? 'focus' : ''}" role="slider" tabindex="0" aria-label="${q.n}" aria-valuetext="${q.v}">
+    <div class="pn">${q.n}</div>${knob(q.p, q.wp, !!q.was)}<div class="v">${q.v}</div>
+    <div class="was">${q.was ? `en el pedal: <b>${q.was}</b>` : ''}</div></div>`).join('');
+</script>
+</body>
+</html>

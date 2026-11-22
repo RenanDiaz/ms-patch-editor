@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dirección B · Banco de trabajo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=Red+Hat+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --base: #e4e8ec; --panel: #ffffff; --sunk: #f1f3f6; --line: #c3cad3; --line2: #8d98a5;
+  --ink: #17202b; --muted: #535e6b;
+  --select: #1f4fd1; --live: #c62a22; --dirty: #8a5a00; --dirty-bg: #fff0c7; --dirty-mark: #e0a21b; --ok: #2b7a4b;
+  --c-dyn: #2f8f6b; --c-drive: #d0602a; --c-mod: #7a55c8; --c-delay: #1f86a8;
+  --ui: "Hanken Grotesk", system-ui, sans-serif;
+  --num: "Red Hat Mono", ui-monospace, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--base); color: var(--ink); font: 15px/1.4 var(--ui); }
+button { font: inherit; color: inherit; cursor: pointer; }
+:focus-visible { outline: 3px solid var(--select); outline-offset: 2px; }
+
+.app { display: grid; grid-template-rows: 52px 1fr; height: 100vh; min-height: 640px; }
+
+/* Línea del dispositivo */
+.device { display: flex; align-items: center; gap: 20px; padding: 0 20px; background: var(--ink); color: #f3f5f8; font-size: 14px; }
+.device .conn { display: flex; align-items: center; gap: 8px; }
+.device .conn i { width: 9px; height: 9px; border-radius: 50%; background: #5fd08f; }
+.device .at { padding: 4px 12px; border-radius: 6px; background: #2a3646; }
+.device .at b { font: 600 15px var(--num); }
+.device .live { display: flex; align-items: center; gap: 10px; }
+.toggle { width: 42px; height: 24px; border-radius: 12px; background: var(--live); position: relative; border: 0; }
+.toggle::after { content: ""; position: absolute; right: 3px; top: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; }
+.device .live b { color: #ff8f88; }
+.device .sp { flex: 1; }
+.device .menu { background: transparent; border: 1px solid #4a5869; color: #f3f5f8; border-radius: 6px; padding: 5px 12px; }
+
+.body { display: grid; grid-template-columns: 330px 1fr 300px; min-height: 0; }
+
+/* Banco como tabla */
+.bank { background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+.bank .head { padding: 14px 16px 10px; display: flex; justify-content: space-between; align-items: baseline; }
+.bank .head h2 { margin: 0; font-size: 16px; }
+.bank .head span { color: var(--muted); font-size: 13px; }
+.bank .filter { margin: 0 16px 10px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); font-size: 14px; }
+.bank table { border-collapse: collapse; width: 100%; font-size: 14px; }
+.bank .scroll { overflow: auto; flex: 1; }
+.bank td { padding: 5px 8px; border-bottom: 1px solid var(--sunk); }
+.bank td.n { font: 500 13px var(--num); color: var(--muted); padding-left: 16px; width: 40px; }
+.bank td.nm { font: 600 14px var(--num); white-space: pre; }
+.bank td.ch { width: 76px; }
+.chips { display: flex; gap: 3px; }
+.chips i { width: 14px; height: 14px; border-radius: 3px; background: var(--c); }
+.chips i.off { background: transparent; border: 2px solid var(--c); }
+.bank td.st { width: 74px; text-align: right; padding-right: 14px; white-space: nowrap; }
+.bank tr.cur { background: #e3eafc; }
+.bank tr.cur td.n { color: var(--select); font-weight: 600; box-shadow: inset 4px 0 0 var(--select); }
+.bank tr.empty td.nm { color: #8a94a0; font-weight: 500; }
+.mk-d { display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: var(--dirty-mark); transform: rotate(45deg); }
+.mk-p { display: inline-block; font-size: 11px; font-weight: 700; color: #fff; background: var(--live); border-radius: 3px; padding: 0 4px; }
+
+/* Centro */
+.work { overflow: auto; padding: 18px 22px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.ptitle { display: flex; align-items: center; gap: 14px; }
+.ptitle .n { font: 600 28px var(--num); color: var(--muted); }
+.ptitle h1 { margin: 0; font: 600 30px var(--num); letter-spacing: .02em; }
+.ptitle .ren { font-size: 13px; color: var(--select); background: none; border: 0; text-decoration: underline; }
+.ptitle .sp { flex: 1; }
+.btn { background: var(--panel); border: 1px solid var(--line2); border-radius: 7px; padding: 8px 16px; font-weight: 600; }
+.btn.primary { background: var(--select); border-color: var(--select); color: #fff; }
+.btn.small { padding: 4px 10px; font-size: 13px; font-weight: 500; }
+kbd { font: 12px var(--ui); opacity: .8; margin-left: 6px; }
+
+.chain { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.blk { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 0; text-align: left; display: grid;
+  grid-template-columns: 8px 1fr; min-height: 92px; overflow: hidden; }
+.blk .stripe { background: var(--c); }
+.blk .in { padding: 10px 12px; display: flex; flex-direction: column; gap: 3px; }
+.blk .row { white-space: nowrap; display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: var(--muted); }
+.blk .nm { font: 600 19px var(--num); }
+.blk .st { font-size: 12px; font-weight: 700; padding: 1px 8px; border-radius: 4px; background: #e2f3e9; color: var(--ok); }
+.blk.off { background: var(--sunk); border-style: dashed; }
+.blk.off .stripe { background: repeating-linear-gradient(180deg, var(--c) 0 6px, transparent 6px 12px); }
+.blk.off .nm { color: var(--muted); }
+.blk.off .st { background: #e6e9ee; color: var(--muted); }
+.blk .chg { color: var(--dirty); font-weight: 600; font-size: 13px; }
+.blk.sel { border: 2px solid var(--select); box-shadow: 0 4px 0 -1px var(--select); }
+
+.params { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
+.phead { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.phead h2 { margin: 0; font: 600 20px var(--num); }
+.phead .meta { color: var(--muted); font-size: 14px; }
+.phead .sp { flex: 1; }
+.grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; }
+.k { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 4px; border-radius: 8px; border: 1px solid transparent; }
+.k .pn { font-size: 14px; font-weight: 600; }
+.k svg { width: 82px; height: 82px; }
+.k .v { font: 600 26px var(--num); font-variant-numeric: tabular-nums; }
+.k .rg { font-size: 12px; color: var(--muted); }
+.k.chg { background: var(--dirty-bg); border-color: #e9cf86; }
+.k.chg .rg { color: var(--dirty); font-weight: 600; }
+
+.hint { font-size: 13px; color: var(--muted); }
+
+/* Columna de cambios y DSP */
+.side { background: var(--panel); border-left: 1px solid var(--line); padding: 16px; display: flex; flex-direction: column; gap: 18px; overflow: auto; }
+.side h3 { margin: 0 0 8px; font-size: 15px; }
+.cards { display: flex; flex-direction: column; gap: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.diff { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; padding: 9px 12px; border-bottom: 1px solid var(--sunk); font-size: 14px; }
+.diff:last-child { border-bottom: 0; }
+.diff .w { color: var(--muted); font-size: 12px; }
+.diff .val { font: 600 14px var(--num); }
+.diff .val s { color: var(--muted); font-weight: 500; text-decoration: none; }
+.diff button { grid-row: 1 / span 2; grid-column: 2; align-self: center; }
+.diff .lineval { display: flex; gap: 6px; align-items: baseline; }
+.savebox { background: var(--dirty-bg); border: 1px solid #e9cf86; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.savebox p { margin: 0; font-size: 14px; color: #4a3500; }
+.savebox .row { display: flex; gap: 8px; }
+.savebox .row .btn { flex: 1; }
+.dsp .bar { display: flex; height: 18px; border-radius: 4px; overflow: hidden; background: var(--sunk); border: 1px solid var(--line2); }
+.dsp .bar span { background: var(--c); border-right: 2px solid #fff; }
+.dsp .bar span.off { background: repeating-linear-gradient(135deg, var(--c) 0 4px, #fff 4px 8px); }
+.dsp ul { list-style: none; padding: 0; margin: 8px 0 0; font-size: 13px; }
+.dsp li { display: flex; justify-content: space-between; padding: 2px 0; }
+.dsp li span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: var(--c); margin-right: 8px; }
+.dsp .tot { display: flex; justify-content: space-between; font-weight: 700; margin-bottom: 6px; }
+
+@media (max-width: 760px) {
+  .app { grid-template-rows: auto 1fr; height: auto; }
+  .device { flex-wrap: wrap; padding: 10px 16px; gap: 10px; }
+  .body { grid-template-columns: 1fr; } .bank { max-height: 220px; } .side { border-left: 0; }
+  .chain { grid-template-columns: 1fr 1fr; } .grid { grid-template-columns: repeat(3, 1fr); } .work { padding: 16px; }
+  .ptitle { flex-wrap: wrap; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="device">
+    <span class="conn"><i></i>MS-60B conectado · firmware 2.10</span>
+    <span class="at">El pedal está en <b>07 DUB DRIVE</b></span>
+    <span class="live"><button class="toggle" role="switch" aria-checked="true" aria-label="En vivo"></button><b>En vivo</b> lo que editas suena en el pedal</span>
+    <span class="sp"></span>
+    <button class="menu" aria-haspopup="menu">Banco: respaldar o restaurar ▾</button>
+  </header>
+
+  <div class="body">
+    <nav class="bank" aria-label="Patches">
+      <div class="head"><h2>Patches</h2><span>2 con cambios</span></div>
+      <div class="filter">Buscar por nombre o efecto</div>
+      <div class="scroll"><table><tbody id="rows"></tbody></table></div>
+    </nav>
+
+    <main class="work">
+      <div class="ptitle">
+        <span class="n">07</span><h1>DUB DRIVE</h1><button class="ren">Renombrar</button>
+        <span class="sp"></span>
+        <button class="btn">Revertir al pedal</button>
+        <button class="btn primary">Guardar 3 cambios<kbd>⌘S</kbd></button>
+      </div>
+
+      <section class="chain" aria-label="Cadena">
+        <button class="blk" style="--c:var(--c-dyn)"><span class="stripe"></span><span class="in">
+          <span class="row"><span>1 · Dinámica</span><span class="st">On</span></span><span class="nm">OptComp</span>
+          <span class="row"><span>Sin cambios</span></span></span></button>
+        <button class="blk sel" style="--c:var(--c-drive)" aria-current="true"><span class="stripe"></span><span class="in">
+          <span class="row"><span>2 · Saturación</span><span class="st">On</span></span><span class="nm">BassDrive</span>
+          <span class="row"><span class="chg">3 cambios</span></span></span></button>
+        <button class="blk off" style="--c:var(--c-mod)"><span class="stripe"></span><span class="in">
+          <span class="row"><span>3 · Modulación</span><span class="st">Bypass</span></span><span class="nm">Ba Chorus</span>
+          <span class="row"><span>Sin cambios</span></span></span></button>
+        <button class="blk" style="--c:var(--c-delay)"><span class="stripe"></span><span class="in">
+          <span class="row"><span>4 · Delay</span><span class="st">On</span></span><span class="nm">Delay</span>
+          <span class="row"><span>Sin cambios</span></span></span></button>
+      </section>
+
+      <section class="params" aria-label="Parámetros de BassDrive">
+        <div class="phead">
+          <h2>BassDrive</h2><span class="meta">bloque 2 · DSP 21 %</span><span class="sp"></span>
+          <button class="btn small">Bypass</button><button class="btn small">Cambiar efecto…</button><button class="btn small">Copiar</button>
+        </div>
+        <div class="grid" id="knobs"></div>
+      </section>
+      <p class="hint">Fondo amarillo = distinto de lo que tiene el pedal. La marca gris en el arco es el valor guardado. Doble clic en un valor para escribirlo; Supr vuelve al valor guardado.</p>
+    </main>
+
+    <aside class="side" aria-label="Cambios y capacidad">
+      <section>
+        <h3>Cambios frente al pedal</h3>
+        <div class="cards">
+          <div class="diff"><span>BassDrive · Gain</span><span class="lineval val"><s>60</s>→ 72</span><button class="btn small">Deshacer</button></div>
+          <div class="diff"><span>BassDrive · Blend</span><span class="lineval val"><s>100</s>→ 85</span><button class="btn small">Deshacer</button></div>
+          <div class="diff"><span>BassDrive · Mid</span><span class="lineval val"><s>+4</s>→ +7</span><button class="btn small">Deshacer</button></div>
+        </div>
+      </section>
+      <section class="savebox">
+        <p>Suenan en el pedal porque En vivo está activo. Si cambias de patch sin guardar, el pedal vuelve a como estaba.</p>
+              </section>
+      <section class="dsp">
+        <div class="tot"><span>DSP estimado</span><span>50 %</span></div>
+        <div class="bar"><span style="--c:var(--c-dyn);width:13%"></span><span style="--c:var(--c-drive);width:21%"></span><span class="off" style="--c:var(--c-mod);width:9%"></span><span style="--c:var(--c-delay);width:7%"></span></div>
+        <ul>
+          <li style="--c:var(--c-dyn)"><span>OptComp</span>13 %</li>
+          <li style="--c:var(--c-drive)"><span>BassDrive</span>21 %</li>
+          <li style="--c:var(--c-mod)"><span>Ba Chorus (bypass, consume igual)</span>9 %</li>
+          <li style="--c:var(--c-delay)"><span>Delay</span>7 %</li>
+        </ul>
+      </section>
+    </aside>
+  </div>
+</div>
+
+<script>
+const C = { d: 'var(--c-dyn)', o: 'var(--c-drive)', m: 'var(--c-mod)', l: 'var(--c-delay)' };
+const bank = [["CLEAN DI","d"],["SVT GROWL","do"],["SLAP COMP","dd"],["OCTAVE UP","mo"],["SYNTH WAH","dm"],["FRETLESS","dml"],["DUB DRIVE","doMl"],
+ ["FUZZ LEAD","oml"],["CHORUS 80S","dml"],["B15 WARM","do"],["PICK ROCK","dol"],["FILTER FNK","dm"],["REGGAE","dol"],["MOTOWN","d"],
+ ["DOOM FUZZ","ool"],["AMBIENT","mll"],["TAPPING","dl"],["SUB OCT","dm"],["ACOUSTIC","dl"],["JAZZ NECK","d"],["TALKBOX","m"],["RING MOD","m"],
+ ["WAH AUTO","dm"],["STADIUM","doml"],["FLANGE","m"],["DRY DI",""],["GROWL 2","oo"],["OCT FUZZ","mo"],["SLAP 2","d"],["PHASER","m"],["LONG VERB","l"],["TREMOLO","m"]];
+while (bank.length < 50) bank.push(["Empty", ""]);
+const dirty = new Set([7, 12]);
+document.getElementById('rows').innerHTML = bank.map(([n, ch], i) => {
+  const k = i + 1;
+  const chips = [...ch].map(c => `<i class="${c === c.toUpperCase() ? 'off' : ''}" style="--c:${C[c.toLowerCase()]}"></i>`).join('');
+  const st = (k === 7 ? '<span class="mk-p" title="El pedal está aquí">PEDAL</span> ' : '') + (dirty.has(k) ? '<span class="mk-d" title="Cambios sin guardar"></span>' : '');
+  return `<tr class="${k === 7 ? 'cur' : ''} ${n === 'Empty' ? 'empty' : ''}"><td class="n">${String(k).padStart(2, '0')}</td><td class="nm">${n}</td><td class="ch"><span class="chips">${chips}</span></td><td class="st">${st}</td></tr>`;
+}).join('');
+
+const P = [
+  { n: 'Bass', v: '+1', p: .55, r: '−10 … +10' }, { n: 'Trebl', v: '+1', p: .55, r: '−10 … +10' }, { n: 'Prese', v: '+3', p: .65, r: '−10 … +10' },
+  { n: 'Gain', v: '72', p: .72, was: '60', wp: .60 }, { n: 'Blend', v: '85', p: .85, was: '100', wp: 1 },
+  { n: 'Level', v: '40', p: .267, r: '0 … 150' }, { n: 'Mid', v: '+7', p: .85, was: '+4', wp: .70 },
+];
+const pt = (a, r) => [50 + r * Math.sin(a * Math.PI / 180), 50 - r * Math.cos(a * Math.PI / 180)];
+const arc = (a0, a1, r) => { const [x0, y0] = pt(a0, r), [x1, y1] = pt(a1, r); return `M${x0} ${y0} A${r} ${r} 0 ${a1 - a0 > 180 ? 1 : 0} 1 ${x1} ${y1}`; };
+const knob = (p, wp, chg) => {
+  const a = -135 + 270 * p, [px, py] = pt(a, 24), col = chg ? '#c98a00' : '#17202b';
+  let g = '';
+  if (wp !== undefined) { const [x0, y0] = pt(-135 + 270 * wp, 33), [x1, y1] = pt(-135 + 270 * wp, 48); g = `<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y1}" stroke="#535e6b" stroke-width="3.5" stroke-linecap="round"/>`; }
+  return `<svg viewBox="0 0 100 100" aria-hidden="true"><path d="${arc(-135, 135, 41)}" fill="none" stroke="#c3cad3" stroke-width="6" stroke-linecap="round"/>
+  <path d="${arc(-135, a, 41)}" fill="none" stroke="${col}" stroke-width="6" stroke-linecap="round"/>${g}
+  <circle cx="50" cy="50" r="29" fill="#f1f3f6" stroke="#8d98a5"/><line x1="50" y1="50" x2="${px}" y2="${py}" stroke="#17202b" stroke-width="4.5" stroke-linecap="round"/></svg>`;
+};
+document.getElementById('knobs').innerHTML = P.map(q => `<div class="k ${q.was ? 'chg' : ''}" role="slider" tabindex="0" aria-label="${q.n}" aria-valuetext="${q.v}">
+  <div class="pn">${q.n}</div>${knob(q.p, q.wp, !!q.was)}<div class="v">${q.v}</div><div class="rg">${q.was ? 'pedal: ' + q.was : q.r}</div></div>`).join('');
+</script>
+</body>
+</html>
