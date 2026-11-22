@@ -26,7 +26,8 @@ describe('copy and paste a block between patches (P1)', () => {
     fireEvent.click(within(bar).getByRole('button', { name: 'Replace block 2' }))
     expect(chain()).toEqual(['M Comp', 'BassDrive', 'SVT'])
     expect(screen.getByRole('slider', { name: 'Gain' })).toHaveAttribute('aria-valuenow', '60')
-    expect(screen.getByText('1 unsaved change', { exact: false })).toBeInTheDocument()
+    // chain + Gain 60: a new block's settings are listed too
+    expect(screen.getByText('2 unsaved changes', { exact: false })).toBeInTheDocument()
     // The bar closes after pasting, so a second click cannot hit another (destructive) action.
     expect(screen.queryByRole('region', { name: 'Clipboard' })).not.toBeInTheDocument()
   })

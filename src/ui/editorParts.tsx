@@ -3,7 +3,7 @@ import { diffPatch, effectName } from '../model/changes'
 import { getEffect, THRU_ID } from '../model/catalog'
 import { isNameChar, MAX_BLOCKS, NAME_MAX, NAME_SYMBOLS, type Block, type Patch } from '../model/patch'
 import { categoryVar } from './categoryColor'
-import { changeLine, pad2, type DiffLine } from './changeText'
+import { chainText, changeLine, pad2, type DiffLine } from './changeText'
 
 
 /** Opens a native modal <dialog> on mount (Escape = onCancel). */
@@ -30,9 +30,6 @@ export function Modal(props: { className?: string; labelledBy: string; onCancel:
 }
 
 /** A patch's chain as small colored squares; bypassed blocks are hollow. */
-/** The chain as words, e.g. "M Comp, SVT (bypass)", for labels and tooltips. */
-export const chainText = (patch: Patch) => patch.blocks.map((b) => `${effectName(b.effectId)}${b.on ? '' : ' (bypass)'}`).join(', ')
-
 export function ChainSquares({ patch, label }: { patch: Patch; label?: boolean }) {
   const text = chainText(patch)
   return (

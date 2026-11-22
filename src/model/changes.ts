@@ -10,8 +10,9 @@ export type Change =
   | { kind: 'name'; from: string; to: string }
   /** Effects, their order or their count differ. */
   | { kind: 'chain'; from: string[]; to: string[] }
-  | { kind: 'bypass'; block: number; effect: string; from: boolean; to: boolean }
-  | { kind: 'param'; block: number; param: number; effect: string; name: string; from: number; to: number }
+  /** `fromDefault`: the block is new in the chain, so `from` is how a new effect arrives (ON, default values). */
+  | { kind: 'bypass'; block: number; effect: string; from: boolean; to: boolean; fromDefault?: boolean }
+  | { kind: 'param'; block: number; param: number; effect: string; name: string; from: number; to: number; fromDefault?: boolean }
 
 export const effectName = (id: number) => (id === THRU_ID ? 'THRU' : (getEffect(id)?.name ?? `0x${id.toString(16)}`))
 
@@ -43,9 +44,18 @@ export function diffPatch(device: Patch, working: Patch): Change[] {
   const to = chainOf(working)
   if (from.join('\u0000') !== to.join('\u0000')) out.push({ kind: 'chain', from, to })
   working.blocks.forEach((w, i) => {
-    const d = deviceBlockFor(device, working, i)
-    if (!d) return
     const effect = effectName(w.effectId)
+    const d = deviceBlockFor(device, working, i)
+    if (!d) {
+      // A block that is new in the chain: list what differs from how a new effect arrives,
+      // so a review shows its bypass and settings (found in a real test: it all hid under "Chain").
+      if (w.effectId === THRU_ID) return
+      if (!w.on) out.push({ kind: 'bypass', block: i, effect, from: true, to: false, fromDefault: true })
+      ;(getEffect(w.effectId)?.params ?? []).forEach((def, j) => {
+        if (w.params[j] !== def.def) out.push({ kind: 'param', block: i, param: j, effect, name: def.name, from: def.def, to: w.params[j], fromDefault: true })
+      })
+      return
+    }
     if (d.on !== w.on) out.push({ kind: 'bypass', block: i, effect, from: d.on, to: w.on })
     const defs = getEffect(w.effectId)?.params ?? []
     defs.forEach((def, j) => {

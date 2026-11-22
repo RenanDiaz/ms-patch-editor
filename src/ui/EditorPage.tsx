@@ -24,11 +24,11 @@ import {
 import { BackupFileError, parseBackupJson, restorePlan, toBackupJson, type BankBackup, type RestoreItem } from '../protocol/backupFile'
 import type { PedalSession } from '../protocol/pedalSession'
 import { BankRestoreDialog } from './BankRestoreDialog'
+import { PatchTransferDialog } from './PatchTransferDialog'
 import { categoryVar } from './categoryColor'
-import { changeLine, pad2 } from './changeText'
+import { chainText, changeLine, pad2 } from './changeText'
 import {
   ChainSquares,
-  chainText,
   ClipboardBar,
   ConfirmDialog,
   ConflictDialog,
@@ -72,6 +72,7 @@ export function EditorPage({ initial, pedal, liveDefault = true }: Props) {
   const [picker, setPicker] = useState<Picker>(null)
   const [clip, setClip] = useState<{ block: Block; from: string } | null>(null)
   const [clipBar, setClipBar] = useState(false)
+  const [transfer, setTransfer] = useState<'copy' | 'swap' | null>(null)
   const [restore, setRestore] = useState<{ fileName: string; backup: BankBackup; items: RestoreItem[] } | null>(null)
   const [bankMsg, setBankMsg] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -434,6 +435,28 @@ export function EditorPage({ initial, pedal, liveDefault = true }: Props) {
                     role="menuitem"
                     onClick={() => {
                       setBankOpen(false)
+                      setTransfer('copy')
+                    }}
+                    disabled={busy}
+                  >
+                    Copy this patch to…
+                    <small>Replaces another patch with {pad2(state.current + 1)}</small>
+                  </button>
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      setBankOpen(false)
+                      setTransfer('swap')
+                    }}
+                    disabled={busy}
+                  >
+                    Swap this patch with…
+                    <small>The two patches trade places</small>
+                  </button>
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      setBankOpen(false)
                       restoreInput.current?.click()
                     }}
                     disabled={!pedal || busy}
@@ -727,6 +750,34 @@ export function EditorPage({ initial, pedal, liveDefault = true }: Props) {
             {num} goes back to the version saved on the pedal. {MOD}Z brings your changes back.
           </p>
         </ConfirmDialog>
+      )}
+
+      {transfer && (
+        <PatchTransferDialog
+          mode={transfer}
+          from={state.current}
+          patches={state.slots.map((s) => s.device)}
+          writesPedal={!!pedal}
+          blocked={dirtyCount > 0 ? 'Save or revert the patches with unsaved changes first.' : undefined}
+          onRun={async (to) => {
+            const from = state.current
+            const pairs: [number, number][] = transfer === 'copy' ? [[from, to]] : [[from, to], [to, from]]
+            if (!pedal) {
+              // Demo: only this page changes.
+              const src = state.slots.map((s) => s.device)
+              pairs.forEach(([a, b]) => dispatch({ type: 'loadSlot', index: b, patch: src[a], raw: state.slots[a].raw, mode: 'replace' }))
+              return pairs.map(([, b]) => ({ slot: b, ok: true }))
+            }
+            const bytes = state.slots.map((s) => s.raw ?? [])
+            pairs.forEach(([a, b]) => (bytes[b] = state.slots[a].raw ?? []))
+            try {
+              return await sync.restoreBank(bytes, pairs.map(([, b]) => b), () => {}, () => false)
+            } catch (e) {
+              return [{ slot: to, ok: false, message: (e as Error).message }]
+            }
+          }}
+          onClose={() => setTransfer(null)}
+        />
       )}
 
       {restore && (

@@ -221,6 +221,33 @@ describe('bank backup and restore (simulated pedal)', () => {
     expect(await screen.findByText(`Saved to ${String(active + 1).padStart(2, '0')} ✓`)).toBeInTheDocument()
   })
 
+  it('Copy this patch to… writes the open patch into the chosen slot, checks it and returns (found missing in a real test)', async () => {
+    const { pedal } = await connected()
+    openBankMenu()
+    fireEvent.click(screen.getByRole('menuitem', { name: /Copy this patch to/ }))
+    const dialog = await screen.findByRole('dialog', { hidden: true })
+    fireEvent.click(within(dialog).getAllByRole('radio', { hidden: true })[33]) // slot 35 (the list skips the open patch 28)
+    expect(dialog.textContent).toMatch(/35 .* will be replaced by/)
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Copy to 35', hidden: true }))
+    await waitFor(() => expect(within(dialog).getByText(/Copied to 35 and checked on the pedal/)).toBeInTheDocument())
+    expect(pedal.memory[34]).toEqual(original[active])
+    expect(pedal.memory[active]).toEqual(original[active])
+    expect(writes(pedal.sent).filter((m) => m[4] === 0x32).map((m) => m[8])).toEqual([34])
+    expect(pedal.program).toBe(active)
+  })
+
+  it('Swap this patch with… trades two slots on the pedal', async () => {
+    const { pedal } = await connected()
+    openBankMenu()
+    fireEvent.click(screen.getByRole('menuitem', { name: /Swap this patch with/ }))
+    const dialog = await screen.findByRole('dialog', { hidden: true })
+    fireEvent.click(within(dialog).getAllByRole('radio', { hidden: true })[0]) // slot 01
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Swap with 01', hidden: true }))
+    await waitFor(() => expect(within(dialog).getByText(/Swapped 28 and 01, both checked/)).toBeInTheDocument())
+    expect(pedal.memory[0]).toEqual(original[active])
+    expect(pedal.memory[active]).toEqual(original[0])
+  })
+
   it('Restore bank writes only the chosen slots that differ, verifies them and returns to the active patch', async () => {
     mockDownloads()
     const { pedal } = await connected()

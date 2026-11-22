@@ -55,7 +55,7 @@ export type BankAction =
    * become the pedal's; 'deviceOnly' = only the device copy, the working copy
    * keeps the user's changes (conflict resolved as "keep mine").
    */
-  | { type: 'loadSlot'; index: number; patch: Patch; raw: number[]; mode: 'replace' | 'deviceOnly'; undoable?: boolean }
+  | { type: 'loadSlot'; index: number; patch: Patch; raw: number[] | null; mode: 'replace' | 'deviceOnly'; undoable?: boolean }
   /** Live listening: the pedal's edit buffer changed (knob on the pedal); it becomes the working copy. */
   | { type: 'setWorking'; index: number; patch: Patch }
   /** The user changed patch on the pedal: follow it, keeping any unsaved working copy. */
