@@ -38,3 +38,6 @@
 .s3-confirm pre { white-space: pre-wrap; word-break: break-all; font-family: var(--mono); font-size: 12px; max-height: 40vh; overflow: auto; }
 .s3-confirm .bar { display: flex; gap: 8px; }
 .s3-confirm button { font: inherit; padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); cursor: pointer; }
+
+.s1 .active-reads { margin: 12px 0; }
+.s1 .active-reads td { text-align: left; font-family: var(--mono); }

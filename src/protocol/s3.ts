@@ -259,3 +259,11 @@ export function sendAndStay(ctx: S3Context, slot: number, bytes: ArrayLike<numbe
     await s.send(sendPatch(bytes))
   })
 }
+
+/** Reads the active patch's edit buffer without changing patch: 0x33, then 0x29 (read only). */
+export const readActive = (ctx: S3Context) =>
+  withSession(ctx, readOnly(ctx.transport), async (s) => {
+    const slot = parseProgramChange(await s.request(requestCurrentProgram(), (r) => parseProgramChange(r) !== null, 'patch activo'))!
+    const bytes = Array.from(await s.request(requestPatch(), isPatchData60B, 'patch activo'))
+    return { slot, bytes }
+  })

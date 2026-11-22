@@ -1,4 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
+import { checkAmpBytes, type AmpCheck } from '../protocol/ampCheck'
+import { readActive } from '../protocol/s3'
 import { compareWithG200kg, readG200kgBankZip, type SlotComparison } from '../protocol/compareG200kgBank'
 import { describeEffect } from '../protocol/describe'
 import { decodePatch60B } from '../protocol/patch60b'
@@ -25,6 +27,7 @@ export function S1ReadPage() {
   const [selected, setSelected] = useState(0)
   const [comparison, setComparison] = useState<SlotComparison[] | null>(null)
   const transportRef = useRef<MidiTransport | null>(null)
+  const [activeReads, setActiveReads] = useState<{ at: string; slot: number; hex: string; check: AmpCheck }[]>([])
   const ports = 'ports' in status ? status.ports : undefined
 
   async function connect() {
@@ -53,6 +56,26 @@ export function S1ReadPage() {
     } catch (e) {
       setStatus({ kind: 'error', message: (e as Error).message, ports })
     }
+  }
+
+  /** Reads the active patch without changing patch (0x33 + 0x29) and checks the AMP bytes. */
+  async function readActiveNow() {
+    const t = transportRef.current
+    if (!t || !ports) return
+    try {
+      const r = await readActive({ transport: t, log: [], t0: performance.now() })
+      setActiveReads((rs) => [{ at: new Date().toISOString(), slot: r.slot, hex: toHex(r.bytes), check: checkAmpBytes(r.bytes) }, ...rs])
+    } catch (e) {
+      setStatus({ kind: 'error', message: (e as Error).message, ports })
+    }
+  }
+
+  function downloadActiveReads() {
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(new Blob([JSON.stringify({ format: 'ms60b-active-reads/1', reads: activeReads }, null, 2)], { type: 'application/json' }))
+    a.download = `ms60b-active-reads-${new Date().toISOString().replace(/[:.]/g, '-')}.json`
+    a.click()
+    URL.revokeObjectURL(a.href)
   }
 
   function downloadCapture() {
@@ -105,6 +128,9 @@ export function S1ReadPage() {
         <button onClick={scan} disabled={!ports || status.kind === 'scanning'}>
           Leer 50 patches
         </button>
+        <button onClick={readActiveNow} disabled={!ports || status.kind === 'scanning'}>
+          Leer patch activo (sin cambiar de patch)
+        </button>
         <button onClick={downloadCapture} disabled={!capture}>
           Descargar captura (JSON)
         </button>
@@ -125,6 +151,49 @@ export function S1ReadPage() {
           {status.kind === 'error' && <span className="bad">Error: {status.message}</span>}
         </span>
       </section>
+
+      {activeReads.length > 0 && (
+        <section className="active-reads">
+          <h2>
+            Lecturas del patch activo{' '}
+            <button onClick={downloadActiveReads}>Descargar lecturas</button>
+          </h2>
+          <table>
+            <thead>
+              <tr>
+                <td>Hora</td>
+                <td>Patch</td>
+                <td>AMP (fw)</td>
+                <td>CAB</td>
+                <td>Byte gabinete pedal / app</td>
+                <td>Byte v2 pedal / app</td>
+                <td>Resto</td>
+              </tr>
+            </thead>
+            <tbody>
+              {activeReads.flatMap((r) =>
+                (r.check.amps.length ? r.check.amps : [null]).map((a, k) => (
+                  <tr key={r.at + k}>
+                    <td>{r.at.slice(11, 19)}</td>
+                    <td>
+                      {String(r.slot + 1).padStart(2, '0')} {r.check.name}
+                    </td>
+                    <td>{a ? `${a.slot + 1}. ${a.name} (fw${a.minFirmware})` : 'sin AMP'}</td>
+                    <td>{a?.cab ?? '—'}</td>
+                    <td className={a && a.cabByte.pedal !== a.cabByte.encoder ? 'bad' : 'ok'}>
+                      {a ? `0x${a.cabByte.pedal.toString(16)} / 0x${a.cabByte.encoder.toString(16)}` : '—'}
+                    </td>
+                    <td className={a && a.v2Byte.pedal !== a.v2Byte.encoder ? 'bad' : 'ok'}>
+                      {a ? `0x${a.v2Byte.pedal.toString(16)} / 0x${a.v2Byte.encoder.toString(16)}` : '—'}
+                    </td>
+                    <td className={r.check.diffs.length ? 'bad' : 'ok'}>{r.check.diffs.length ? `difiere en ${r.check.diffs.join(', ')}` : 'idéntico'}</td>
+                  </tr>
+                )),
+              )}
+            </tbody>
+          </table>
+        </section>
+      )}
 
       {capture && (
         <p className="muted">
